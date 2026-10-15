@@ -1,0 +1,217 @@
+name: PR build artifacts
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-artifacts:
+    name: Windows artifacts
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: apps/chatgptx-manager/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          $makensis = $null
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            choco install nsis -y --no-progress
+            # Chocolatey 可能在下载失败后返回成功，必须实际验证编译器。
+            $candidates = @(
+              "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+              "$env:ProgramFiles\NSIS\makensis.exe"
+            )
+            $makensis = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+            if (-not $makensis) {
+              $command = Get-Command makensis.exe -ErrorAction SilentlyContinue
+              if ($command) { $makensis = $command.Source }
+            }
+            if ($makensis) {
+              & $makensis /VERSION
+              if ($LASTEXITCODE -eq 0) { break }
+            }
+            $makensis = $null
+            if ($attempt -lt 3) { Start-Sleep -Seconds (10 * $attempt) }
+          }
+          if (-not $makensis) { throw "NSIS 安装失败或编译器不可用，停止 PR 构建。" }
+
+      - name: Install frontend dependencies
+        working-directory: apps/chatgptx-manager
+        run: npm ci
+
+      - name: Frontend tests
+        working-directory: apps/chatgptx-manager
+        run: npm test
+
+      - name: Check native browser inspector bundle
+        run: node scripts/assemble-native-browser-inspector.mjs --check
+
+      - name: TypeScript check
+        working-directory: apps/chatgptx-manager
+        run: npm run check
+
+      - name: Build frontend
+        working-directory: apps/chatgptx-manager
+        run: npm run vite:build
+
+      - name: Rust tests
+        run: cargo test --workspace --lib --bins
+
+      - name: Build release application
+        run: cargo build --release -p chatgptx-manager --bin chatgptx
+      - name: Stage Windows app files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/windows/app | Out-Null
+          Copy-Item target/release/chatgptx.exe dist/windows/app/
+          if ((Get-ChildItem dist/windows/app -Filter *.exe).Count -ne 1) { throw "Windows 安装包必须只有一个应用程序。" }
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v", "V")
+          $version = $version -replace '[\\/]', '-'
+          if (-not $version -or $version -eq "main") {
+            $version = "0.0.0-${{ github.run_number }}"
+          }
+          # NSIS 的 64 位安装目录与 Chocolatey PATH 更新均需要兼容。
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+            "$env:ProgramFiles\NSIS\makensis.exe"
+          )
+          $makensis = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+          if (-not $makensis) {
+            $command = Get-Command makensis.exe -ErrorAction SilentlyContinue
+            if ($command) { $makensis = $command.Source }
+          }
+          if (-not $makensis) {
+            throw "NSIS 编译器未找到，检查 Chocolatey 安装结果。"
+          }
+          Push-Location scripts/installer/windows
+          try {
+            & $makensis "/INPUTCHARSET" "UTF8" "/DVERSION=$version" ChatGPTX.nsi
+            if ($LASTEXITCODE -ne 0) { throw "NSIS 打包失败，退出码 $LASTEXITCODE" }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Upload Windows binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgptx-windows-binaries
+          path: dist/windows/app/*
+          if-no-files-found: error
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgptx-windows-installer
+          path: dist/windows/*.exe
+          if-no-files-found: error
+
+  macos-dmg:
+    # PR 构建也出通用包，跟发版产物保持一致，避免只在发版时才暴露问题。
+    # 没有签名密钥，所以这里走 ad-hoc（脚本的默认行为）。
+    name: macOS DMG (universal)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: apps/chatgptx-manager/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install frontend dependencies
+        working-directory: apps/chatgptx-manager
+        run: npm ci
+
+      - name: Check native browser inspector bundle
+        run: node scripts/assemble-native-browser-inspector.mjs --check
+
+      - name: Build frontend
+        working-directory: apps/chatgptx-manager
+        run: npm run vite:build
+
+      - name: Build macOS DMG
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${VERSION#V}"
+          VERSION="${VERSION//\//-}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "main" ]; then
+            VERSION="0.0.0-${GITHUB_RUN_NUMBER}"
+          fi
+          cargo build --release -p chatgptx-manager --bins
+          BINARY_DIR="target/release" bash scripts/installer/macos/package-dmg.sh "$VERSION" universal
+      - name: Verify macOS bundle structure
+        run: |
+          set -euo pipefail
+          test -L "dist/macos/stage/Applications"
+          test "$(readlink "dist/macos/stage/Applications")" = "/Applications"
+          apps=(dist/macos/stage/*.app)
+          test "${#apps[@]}" = "2"
+          test -f "dist/macos/stage/.hidden"
+          grep -qx "ChatGPTX 管理工具.app" "dist/macos/stage/.hidden"
+          for app in "dist/macos/stage/ChatGPTX.app" "dist/macos/stage/ChatGPTX 管理工具.app"; do
+            test -f "$app/Contents/Info.plist"
+            test -f "$app/Contents/PkgInfo"
+            test -x "$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+            if [[ "$app" == *"管理工具.app" ]]; then
+              test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.chatgptx.app.manager"
+              test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")" = "ChatGPTXManager"
+            else
+              test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.chatgptx.app"
+              test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")" = "ChatGPTX"
+            fi
+            test "$(/usr/libexec/PlistBuddy -c 'Print :ChatGPTXUnifiedApp' "$app/Contents/Info.plist")" = "true"
+            plutil -lint "$app/Contents/Info.plist" >/dev/null
+            codesign -dv "$app" >/dev/null 2>&1
+            echo "verified: $app"
+          done
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgptx-macos-universal-dmg
+          path: dist/macos/*.dmg
+          if-no-files-found: error

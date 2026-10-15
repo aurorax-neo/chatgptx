@@ -1,0 +1,46 @@
+name: Deploy site
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Refresh site data
+        run: node site/scripts/build-data.mjs
+
+      - name: Configure Pages
+        id: configure_pages
+        continue-on-error: true
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        if: steps.configure_pages.outcome == 'success'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        if: steps.configure_pages.outcome == 'success'
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,48 @@
+__pycache__/
+.venv/
+venv/
+.worktrees/
+*.egg-info/
+build/
+dist/
+target/
+node_modules/
+apps/chatgptx-manager/src-tauri/gen/
+
+.codex_asar_extract/
+.codex_asar_extract_latest/
+.superpowers/
+.claude/
+docs/superpowers/
+
+*.log
+.DS_Store
+Thumbs.db
+.env
+tools/codex-wechat/config.local.json
+
+# pnpm artifacts (project uses npm)
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# project-specific
+/temp/
+.trae/
+plan.md
+plan_v2.md
+
+# agent 工作区产物：调试脚本 / 计划 / 临时提交信息，一律不入库
+work/
+.zcode/
+.tmp-commit-msg.txt
+.tmp-*.cjs
+assets/example.json
+issue*-repro.md
+stepfun-*-stall-bugreport.md
+
+
+# ZCode CLI 本地工作区配置
+.zcodeignore
+
+# agent/CLI 本地临时目录（.zcode/ 之外的变体）
+.zcodetmp/
