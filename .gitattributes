@@ -1,0 +1,27 @@
+# Windows shell scripts require CRLF for cmd.exe label parsing
+# (LF-only .bat files break `goto label` at runtime).
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+*.sh text eol=lf
+.github/workflows/*.yml text eol=lf
+
+# Rust sources are read back by source-contract tests via include_str! and compared
+# line-by-line. Git for Windows defaults to core.autocrlf=true, so without this a
+# Windows checkout turns every "\n" in those assertions into "\r\n" and the tests fail
+# on the Windows runner only (macOS/Linux check out LF either way).
+*.rs text eol=lf
+
+# First-party scripts are embedded with include_str! and inspected by source-contract tests.
+assets/inject/*.js text eol=lf
+assets/inject/**/*.js text eol=lf
+assets/native-browser/*.mjs text eol=lf
+assets/native-browser/*.cjs text eol=lf
+assets/native-browser/fixtures/*.mjs text eol=lf
+assets/native-browser/inspector-NOTICE.txt text eol=lf
+
+# Keep every byte-exact upstream theme asset stable on all checkout platforms.
+assets/inject/upstream/**/*.js text eol=lf
+assets/inject/upstream/**/*.css text eol=lf
+assets/inject/upstream/skin-packs/packs/*/theme.json text eol=lf

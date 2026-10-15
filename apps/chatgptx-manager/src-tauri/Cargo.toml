@@ -1,0 +1,39 @@
+[package]
+name = "chatgptx-manager"
+default-run = "chatgptx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "chatgptx_manager_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "chatgptx"
+path = "src/main.rs"
+
+[[bin]]
+name = "chatgptx-legacy-shim"
+path = "src/legacy_shim.rs"
+
+[dependencies]
+anyhow.workspace = true
+async-trait = "0.1"
+chatgptx-core = { path = "../../../crates/chatgptx-core" }
+chatgptx-data = { path = "../../../crates/chatgptx-data" }
+chatgptx-launcher = { path = "../../chatgptx-launcher" }
+directories.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = ["protocol-asset", "custom-protocol", "tray-icon"] }
+tauri-plugin-dialog = "2"
+toml_edit.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile.workspace = true

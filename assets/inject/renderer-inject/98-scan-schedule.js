@@ -1,0 +1,174 @@
+  window.__chatgptxScanScheduleCleanup?.();
+  clearTimeout(window.__codexSessionDeleteScanTimer);
+  cancelAnimationFrame(window.__codexSessionDeleteDeferredRaf);
+  window.__codexSessionDeleteScanTimer = null;
+  window.__codexSessionDeleteDeferredRaf = 0;
+  window.__codexSessionDeleteScanPending = false;
+  window.__codexSessionDeleteDeferredPending = false;
+
+  /**
+   * 这个节点是不是 ChatGPTX 自己（或拓展）的 UI。
+   *
+   * 内置选择器写在这里；拓展通过注册中心登记的选择器走 isChatGPTXExtensionNode，
+   * 那边已把选择器合并成一个串并在 Set 变化时重建缓存，所以这里每次调用只多一次
+   * closest()，不会因为拓展数量增长而线性变慢。
+   */
+  function isExtensionUiNode(node) {
+    if (!node?.closest) return false;
+    if (node.closest(`[data-chatgptx-ext], .codex-delete-toast, .codex-delete-confirm-overlay, .chatgptx-modal-overlay, .${chatgptxPageClass}, #${chatgptxSidebarNavId}, #${chatgptxRailNavId}, #${chatgptxRailExtensionsId}, #${chatgptxRailSponsorId}, #${chatgptxRailNavId} > button, #${chatgptxRailExtensionsId} > button, #${chatgptxRailSponsorId} > button, .${codexServiceTierBadgeClass}, .${sessionShareButtonClass}, .codex-zed-remote-button, .codex-zed-remote-toast, .${sessionCopyMenuItemClass}, #chatgptx-menu, #${capacityAutoRetryChipId}`)) {
+      return true;
+    }
+    return isChatGPTXExtensionNode(node);
+  }
+
+  function scanRelevantSelector() {
+    return [
+      selectors.sidebarThread,
+      '[data-app-action-sidebar-section-heading="Chats"]',
+      '[data-app-action-sidebar-section-heading="Projects"]',
+      '[data-codex-archive-page-row="true"]',
+      "[data-codex-archive-delete-all]",
+      '[data-message-author-role]',
+      '[data-testid="conversation-turn"]',
+      '[class*="user-message"]',
+      '[class*="UserMessage"]',
+      ".composer-footer",
+      selectors.appHeader,
+      selectors.archiveNav,
+      selectors.pluginNavButton,
+      'aside.app-shell-left-panel nav[role="navigation"]',
+      'nav[data-app-navigation-rail]',
+      ...(codexPluginMarketplacePatchEnabled() ? [selectors.disabledInstallButton] : []),
+    ].join(", ");
+  }
+
+  function nodeSelfOrAncestorMatchesScanRelevance(node) {
+    if (node.nodeType !== 1) return false;
+    if (isExtensionUiNode(node)) return false;
+    const relevantSelector = scanRelevantSelector();
+    return !!node.closest?.(relevantSelector) ||
+      nodeOrAncestorLooksLikeCodexUserBubble(node);
+  }
+
+  function isScanRelevantNode(node) {
+    if (node.nodeType !== 1) return false;
+    if (isExtensionUiNode(node)) return false;
+    return nodeSelfOrAncestorMatchesScanRelevance(node) || !!node.querySelector?.(scanRelevantSelector()) || nodeLooksLikeCodexUserBubble(node);
+  }
+
+  function isChatContentMutation(mutation) {
+    const target = mutation.target;
+    if (!target?.closest?.('[data-message-author-role], [data-testid="conversation-turn"], main .prose')) return false;
+    return !Array.from(mutation.addedNodes).some((node) => node.nodeType === 1 && isScanRelevantNode(node)) &&
+      !Array.from(mutation.removedNodes).some((node) => node.nodeType === 1 && isScanRelevantNode(node));
+  }
+
+  function shouldScheduleScan(mutations) {
+    if (!mutations) return true;
+    return mutations.some((mutation) => {
+      if (isChatContentMutation(mutation)) return false;
+      const target = mutation.target;
+      if (isExtensionUiNode(target)) return false;
+      const changedNodes = [...Array.from(mutation.addedNodes), ...Array.from(mutation.removedNodes)];
+      const changedElements = changedNodes.filter((node) => node.nodeType === 1);
+      // 我们自己插入的节点挂在 Codex 的容器里，而容器本身是 scan-relevant，
+      // 于是「写入 → 观察到自己的写入 → 200ms 后再 scan → 再写入」形成自喂循环，
+      // 空闲时也每秒全量扫描五次，macOS 上足以吃满一个核（issue #1960）。
+      // 一次变更如果只动了我们自己的 UI，就不该再排一次 scan。
+      if (changedElements.length && changedElements.every(isExtensionUiNode)) return false;
+      if (target?.nodeType === 1 && nodeSelfOrAncestorMatchesScanRelevance(target)) return true;
+      return changedElements.some((node) => isScanRelevantNode(node));
+    });
+  }
+
+  function runScheduledScan() {
+    clearTimeout(window.__codexSessionDeleteScanTimer);
+    window.__codexSessionDeleteScanTimer = null;
+    if (document.hidden) {
+      window.__codexSessionDeleteScanPending = true;
+      return;
+    }
+    window.__codexSessionDeleteScanPending = false;
+    scan();
+  }
+
+  function scheduleDeferredScan() {
+    window.__codexSessionDeleteDeferredPending = true;
+    if (document.hidden || window.__codexSessionDeleteDeferredRaf) return;
+    window.__codexSessionDeleteDeferredRaf = requestAnimationFrame(() => {
+      window.__codexSessionDeleteDeferredRaf = 0;
+      if (document.hidden) return;
+      window.__codexSessionDeleteDeferredPending = false;
+      runScanStep(scanDeferred);
+    });
+  }
+
+  function scheduleScan(mutations) {
+    window.__codexSessionDeleteLastMutations = mutations;
+    if (window.__codexSessionDeleteScanPending) return;
+    if (!shouldScheduleScan(mutations)) return;
+    window.__codexSessionDeleteScanPending = true;
+    if (document.hidden) return;
+    window.__codexSessionDeleteScanTimer = setTimeout(runScheduledScan, 200);
+  }
+
+  const onScanVisibilityChange = () => {
+    if (document.hidden) {
+      clearTimeout(window.__codexSessionDeleteScanTimer);
+      window.__codexSessionDeleteScanTimer = null;
+      cancelAnimationFrame(window.__codexSessionDeleteDeferredRaf);
+      window.__codexSessionDeleteDeferredRaf = 0;
+      return;
+    }
+    // Hidden mutations describe one current DOM, not a history to replay.
+    if (window.__codexSessionDeleteScanPending) {
+      clearTimeout(window.__codexSessionDeleteScanTimer);
+      window.__codexSessionDeleteScanTimer = setTimeout(runScheduledScan, 0);
+    } else if (window.__codexSessionDeleteDeferredPending) scheduleDeferredScan();
+  };
+  document.addEventListener("visibilitychange", onScanVisibilityChange);
+  window.__chatgptxScanScheduleCleanup = () => {
+    document.removeEventListener("visibilitychange", onScanVisibilityChange);
+    clearTimeout(window.__codexSessionDeleteScanTimer);
+    cancelAnimationFrame(window.__codexSessionDeleteDeferredRaf);
+    window.__codexSessionDeleteScanPending = false;
+    window.__codexSessionDeleteDeferredPending = false;
+  };
+
+  /**
+   * 侧边栏入口的启动补扫。
+   *
+   * 注入永远早于 Codex 把左侧面板渲染出来：注入那一刻 readyState 已是 complete，
+   * 但 aside.app-shell-left-panel 还不存在（实测 anyNav: 0），所以首次 scan 里的
+   * installChatGPTXSidebarNavigation 必然走 `if (!navigation) return`。
+   *
+   * 之后全靠 MutationObserver 观察到侧边栏挂载再补一次，实测要 2.6~3.1 秒。
+   * 但那把入口的出现押在了单次 DOM 变更上——那次变更若被 shouldScheduleScan
+   * 过滤掉，就没有下一次触发，入口会一直缺失到用户手动操作产生新的变更为止。
+   *
+   * 这里加一个不依赖 DOM 事件的有界重试作为兜底：插上就停，超时就放弃，
+   * 不留常驻定时器，也不影响 observer 那条正常路径。
+   */
+  function scheduleSidebarNavStartupRetry() {
+    clearInterval(window.__chatgptxSidebarNavRetryTimer);
+    let attempts = 0;
+    window.__chatgptxSidebarNavRetryTimer = setInterval(() => {
+      attempts += 1;
+      const installed = document.getElementById(chatgptxSidebarNavId)
+        || document.getElementById(chatgptxRailNavId);
+      if (installed || attempts > 20) {
+        clearInterval(window.__chatgptxSidebarNavRetryTimer);
+        window.__chatgptxSidebarNavRetryTimer = null;
+        return;
+      }
+      try {
+        installChatGPTXNavigationEntries();
+      } catch {}
+    }, 300);
+  }
+
+  void loadBackendSettingsForStartup();
+  scan();
+  syncOfficialUsagePolicy();
+  scheduleSidebarNavStartupRetry();
+  window.removeEventListener("resize", window.__chatgptxResizeHandler);

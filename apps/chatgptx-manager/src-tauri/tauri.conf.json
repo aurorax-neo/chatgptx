@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ChatGPTX",
+  "version": "0.1.0",
+  "identifier": "com.chatgptx.app",
+  "build": {
+    "beforeDevCommand": "npm run vite:dev",
+    "beforeBuildCommand": "npm run vite:build",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "create": false,
+        "label": "main",
+        "title": "ChatGPTX",
+        "width": 1180,
+        "height": 820,
+        "minWidth": 960,
+        "minHeight": 720
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$HOME/.chatgptx/dream-skin/**"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "macOS": {
+      "infoPlist": "Info.plist"
+    },
+    "icon": [
+      "icons/icon.ico"
+    ]
+  }
+}
