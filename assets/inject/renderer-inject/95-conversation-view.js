@@ -217,13 +217,13 @@
     if (!chatgptxBackendSettingsLoaded && officialUsageRuntime.lastPolicy) return officialUsageRuntime.lastPolicy;
     const profile = codexRemoteSessionActiveProfile();
     const official = String(profile?.relayMode || "") === "official";
-    const mixed = official && profile?.officialMixApiKey === true;
+    const hasApi = Boolean((profile?.apiKey && String(profile.apiKey).trim()) || (profile?.baseUrl && String(profile.baseUrl).trim()));
+    const mixed = (official && profile?.officialMixApiKey === true) || hasApi;
     const policy = {
-      official,
+      official: official || hasApi,
       hideAlerts: mixed,
       unlockSend: mixed,
     };
-    if (chatgptxBackendSettingsLoaded) officialUsageRuntime.lastPolicy = policy;
     return policy;
   }
 

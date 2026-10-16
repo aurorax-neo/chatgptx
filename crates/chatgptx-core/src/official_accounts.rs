@@ -989,10 +989,41 @@ pub fn build_auth_json_for_account(
     existing_auth_contents: Option<&str>,
     preserve_api_key: bool,
 ) -> anyhow::Result<String> {
+    build_auth_json_for_account_with_fallback_key(account, existing_auth_contents, preserve_api_key, None)
+}
+
+pub fn build_auth_json_for_account_with_fallback_key(
+    account: &OfficialAccount,
+    existing_auth_contents: Option<&str>,
+    preserve_api_key: bool,
+    fallback_api_key: Option<&str>,
+) -> anyhow::Result<String> {
     let mut root = existing_auth_contents
         .and_then(|s| serde_json::from_str::<Value>(s).ok())
         .and_then(|v| v.as_object().cloned())
         .unwrap_or_default();
+    if !preserve_api_key {
+        root.insert("OPENAI_API_KEY".to_string(), Value::Null);
+    } else {
+        let current_key = root
+            .get("OPENAI_API_KEY")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        let fallback = fallback_api_key.unwrap_or("").trim();
+        let effective_key = if !current_key.is_empty() {
+            current_key
+        } else if !fallback.is_empty() {
+            fallback
+        } else {
+            ""
+        };
+        if !effective_key.is_empty() {
+            root.insert("OPENAI_API_KEY".to_string(), json!(effective_key));
+        } else {
+            root.insert("OPENAI_API_KEY".to_string(), Value::Null);
+        }
+    }
 
     // 清理可能干扰官方客户端识别的旧字段
     for stale_key in [
@@ -1417,10 +1448,12 @@ pub fn switch_official_account(
             } else {
                 existing_live_auth.clone()
             };
-            let auth_json = build_auth_json_for_account(
+            let bound_api_key = settings.relay_profiles[relay_idx].api_key.trim().to_string();
+            let auth_json = build_auth_json_for_account_with_fallback_key(
                 &account,
                 base_auth.as_deref(),
                 preserve_api_key,
+                (!bound_api_key.is_empty()).then_some(&bound_api_key),
             )?;
             settings.relay_profiles[relay_idx].auth_contents = auth_json;
 
@@ -1431,11 +1464,37 @@ pub fn switch_official_account(
                 &profile_clone,
                 &common,
             )?;
+            // 官方账号绑定第三方供应商时，必须显式确保 config.toml 中的当前 provider 携带 requires_openai_auth = true，
+            // 否则 Codex 客户端将把其当做纯无账号 API 供应商，跳过读取 auth.json / Keychain 中的官方 OAuth tokens，导致未登录！
+            let config_path = codex_home.join("config.toml");
+            if let Ok(existing_cfg) = std::fs::read_to_string(&config_path) {
+                if let Ok(mut doc) = existing_cfg.parse::<toml_edit::DocumentMut>() {
+                    let provider_key = doc
+                        .get("model_provider")
+                        .and_then(toml_edit::Item::as_str)
+                        .map(str::trim)
+                        .unwrap_or("custom")
+                        .to_string();
+                    if let Some(providers) = doc
+                        .get_mut("model_providers")
+                        .and_then(toml_edit::Item::as_table_like_mut)
+                    {
+                        if let Some(p) = providers.get_mut(&provider_key).and_then(toml_edit::Item::as_table_like_mut) {
+                            p.insert("requires_openai_auth", toml_edit::value(true));
+                        }
+                    }
+                    let _ = crate::settings::atomic_write(&config_path, doc.to_string().as_bytes());
+                }
+            }
             let final_live = std::fs::read_to_string(codex_home.join("auth.json"))
                 .ok()
                 .or(base_auth);
-            let merged_auth =
-                build_auth_json_for_account(&account, final_live.as_deref(), preserve_api_key)?;
+            let merged_auth = build_auth_json_for_account_with_fallback_key(
+                &account,
+                final_live.as_deref(),
+                preserve_api_key,
+                (!bound_api_key.is_empty()).then_some(&bound_api_key),
+            )?;
             write_auth_json_and_sync_store(codex_home, &merged_auth)?;
             store.save(&settings)?;
             return Ok(settings);

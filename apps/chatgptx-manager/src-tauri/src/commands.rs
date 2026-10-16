@@ -954,6 +954,27 @@ fn launch_codex_multi_instance_blocking(request: CodexMultiLaunchRequest) -> Com
             }
             let _ = chatgptx_core::settings::atomic_write(&cfg_path, doc.to_string().as_bytes());
         }
+    } else if explicit_official_auth_json.is_some() {
+        let cfg_path = codex_home.join("config.toml");
+        if let Ok(existing_cfg) = std::fs::read_to_string(&cfg_path)
+            && let Ok(mut doc) = existing_cfg.parse::<toml_edit::DocumentMut>()
+        {
+            let provider_key = doc
+                .get("model_provider")
+                .and_then(toml_edit::Item::as_str)
+                .map(str::trim)
+                .unwrap_or("custom")
+                .to_string();
+            if let Some(providers) = doc
+                .get_mut("model_providers")
+                .and_then(toml_edit::Item::as_table_like_mut)
+            {
+                if let Some(p) = providers.get_mut(&provider_key).and_then(toml_edit::Item::as_table_like_mut) {
+                    p.insert("requires_openai_auth", toml_edit::value(true));
+                }
+            }
+            let _ = chatgptx_core::settings::atomic_write(&cfg_path, doc.to_string().as_bytes());
+        }
     }
     if let Err(error) = absolutize_multi_instance_model_catalog(&codex_home) {
         return failed(

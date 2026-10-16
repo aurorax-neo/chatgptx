@@ -4,7 +4,9 @@
     if (hostId !== "local" || settings?.relayProfilesEnabled !== true) return false;
     if (!Array.isArray(settings.relayProfiles)) return false;
     const profile = settings.relayProfiles.find((item) => item?.id === settings.activeRelayId);
-    return !!profile && profile.relayMode === "official" && profile.officialMixApiKey === true;
+    if (!profile) return false;
+    if (profile.relayMode === "official" && profile.officialMixApiKey === true) return true;
+    return Boolean((profile.apiKey && String(profile.apiKey).trim()) || (profile.baseUrl && String(profile.baseUrl).trim()));
   }
 
   function locate(text, url) {
