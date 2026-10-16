@@ -404,19 +404,6 @@ fn read_codex_keychain_raw_json(_codex_home: &Path) -> Option<String> {
 #[cfg(all(target_os = "macos", not(test)))]
 fn sync_codex_keychain_if_present(codex_home: &Path, auth_json: &str) {
     let account = build_codex_keychain_account(codex_home);
-    let exists = std::process::Command::new("security")
-        .args([
-            "find-generic-password",
-            "-s",
-            CODEX_KEYCHAIN_SERVICE,
-            "-a",
-            &account,
-        ])
-        .output()
-        .is_ok_and(|out| out.status.success());
-    if !exists {
-        return;
-    }
     let compact = serde_json::from_str::<Value>(auth_json)
         .ok()
         .and_then(|v| serde_json::to_string(&v).ok())
@@ -435,10 +422,55 @@ fn sync_codex_keychain_if_present(codex_home: &Path, auth_json: &str) {
         .output();
 }
 
+#[cfg(all(target_os = "macos", not(test)))]
+pub fn delete_codex_keychain_if_present(codex_home: &Path) {
+    let account = build_codex_keychain_account(codex_home);
+    let _ = std::process::Command::new("security")
+        .args([
+            "delete-generic-password",
+            "-s",
+            CODEX_KEYCHAIN_SERVICE,
+            "-a",
+            &account,
+        ])
+        .output();
+}
+
 #[cfg(not(all(target_os = "macos", not(test))))]
 fn sync_codex_keychain_if_present(_codex_home: &Path, _auth_json: &str) {}
 
-fn write_auth_json_and_sync_store(codex_home: &Path, auth_json: &str) -> anyhow::Result<()> {
+#[cfg(not(all(target_os = "macos", not(test))))]
+pub fn delete_codex_keychain_if_present(_codex_home: &Path) {}
+
+/// 对齐 config.toml 中的官方 forced_login_method 字段（若存在）。
+/// 官方客户端若该字段被锁定为 api，会阻止 OAuth 登录；锁定为 chatgpt 时会阻止纯 API 登录。
+pub fn align_forced_login_method_in_config(codex_home: &Path, target: &str) -> anyhow::Result<bool> {
+    let config_path = codex_home.join("config.toml");
+    let Ok(existing) = std::fs::read_to_string(&config_path) else {
+        return Ok(false);
+    };
+    if existing.trim().is_empty() {
+        return Ok(false);
+    }
+    let mut doc = match existing.parse::<toml_edit::DocumentMut>() {
+        Ok(d) => d,
+        Err(_) => return Ok(false),
+    };
+    let current = doc
+        .get("forced_login_method")
+        .and_then(toml_edit::Item::as_str)
+        .map(|s| s.trim().to_ascii_lowercase());
+    let Some(current) = current else {
+        return Ok(false);
+    };
+    if current == target {
+        return Ok(false);
+    }
+    doc["forced_login_method"] = toml_edit::value(target);
+    crate::settings::atomic_write(&config_path, doc.to_string().as_bytes())?;
+    Ok(true)
+}
+pub fn write_auth_json_and_sync_store(codex_home: &Path, auth_json: &str) -> anyhow::Result<()> {
     std::fs::create_dir_all(codex_home)?;
     let auth_path = codex_home.join("auth.json");
     crate::settings::atomic_write(&auth_path, auth_json.as_bytes())?;
@@ -1169,7 +1201,7 @@ pub async fn import_official_accounts_from_input(
     }
 
     // 4. 否则按 Refresh Token 尝试向 OpenAI OAuth 端点兑换完整 Token
-    let tokens = exchange_refresh_token_for_official_tokens(trimmed, None).await?;
+    let tokens = exchange_refresh_token_for_official_tokens(trimmed, None, None).await?;
     let acct = build_account_from_tokens(tokens, None, label)?;
     let saved = upsert_official_account(acct, true)?;
     Ok(vec![saved])
@@ -1394,7 +1426,7 @@ pub async fn prepare_official_account_for_switch(account_id: &str) -> anyhow::Re
 
     let proxy = effective_proxy_for_account(Some(&account));
     if let Ok(new_tokens) =
-        exchange_refresh_token_for_official_tokens(refresh_tok, proxy.as_deref()).await
+        exchange_refresh_token_for_official_tokens(refresh_tok, Some(&account.tokens.id_token), proxy.as_deref()).await
     {
         persist_account_tokens(account_id, &new_tokens);
         let state = load_official_accounts_state();
@@ -1495,6 +1527,7 @@ pub fn switch_official_account(
                 preserve_api_key,
                 (!bound_api_key.is_empty()).then_some(&bound_api_key),
             )?;
+            let _ = align_forced_login_method_in_config(codex_home, "chatgpt");
             write_auth_json_and_sync_store(codex_home, &merged_auth)?;
             store.save(&settings)?;
             return Ok(settings);
@@ -1548,7 +1581,7 @@ pub fn switch_official_account(
             let _ = crate::settings::atomic_write(&config_path, doc.to_string().as_bytes());
         }
     }
-
+    let _ = align_forced_login_method_in_config(codex_home, "chatgpt");
     write_auth_json_and_sync_store(codex_home, &official_auth_json)?;
     store.save(&settings)?;
     Ok(settings)
@@ -1574,10 +1607,24 @@ pub fn deactivate_official_account_for_pure_api(
     let trimmed_key = api_key.trim();
     if !trimmed_key.is_empty() {
         let pure_auth = serde_json::to_string_pretty(&json!({
+            "auth_mode": "apikey",
             "OPENAI_API_KEY": trimmed_key,
         }))?;
-        write_auth_json_and_sync_store(codex_home, &format!("{pure_auth}\n"))?;
+        std::fs::create_dir_all(codex_home)?;
+        let auth_path = codex_home.join("auth.json");
+        crate::settings::atomic_write(&auth_path, format!("{pure_auth}\n").as_bytes())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&auth_path, std::fs::Permissions::from_mode(0o600));
+        }
+        delete_codex_keychain_if_present(codex_home);
+    } else {
+        let auth_path = codex_home.join("auth.json");
+        let _ = std::fs::remove_file(&auth_path);
+        delete_codex_keychain_if_present(codex_home);
     }
+    let _ = align_forced_login_method_in_config(codex_home, "api");
     Ok(())
 }
 
@@ -1981,11 +2028,22 @@ async fn exchange_code_for_official_tokens(
     if !status.is_success() {
         anyhow::bail!("OAuth Token 兑换失败 ({status})：{body}");
     }
-    parse_oauth_token_response(&body, None)
+    parse_oauth_token_response(&body, None, None)
+}
+
+fn codex_client_user_agent() -> String {
+    format!(
+        "Codex Desktop/{} ({} {}; {})",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        std::env::consts::FAMILY
+    )
 }
 
 pub async fn exchange_refresh_token_for_official_tokens(
     refresh_token: &str,
+    current_id_token: Option<&str>,
     proxy_override: Option<&str>,
 ) -> anyhow::Result<OfficialTokens> {
     let fallback_proxy = effective_proxy_for_account(None);
@@ -1993,16 +2051,13 @@ pub async fn exchange_refresh_token_for_official_tokens(
     let client = build_http_client_with_optional_proxy(proxy, 30)?;
     let resp = client
         .post(OFFICIAL_OAUTH_TOKEN_URL)
-        .header(
-            reqwest::header::CONTENT_TYPE,
-            "application/x-www-form-urlencoded",
-        )
-        .form(&[
-            ("grant_type", "refresh_token"),
-            ("client_id", OFFICIAL_OAUTH_CLIENT_ID),
-            ("refresh_token", refresh_token.trim()),
-            ("scope", "openid profile email"),
-        ])
+        .header(reqwest::header::USER_AGENT, codex_client_user_agent())
+        .header("originator", "Codex Desktop")
+        .json(&serde_json::json!({
+            "client_id": OFFICIAL_OAUTH_CLIENT_ID,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token.trim(),
+        }))
         .send()
         .await
         .context("请求刷新官方账号 Token 失败")?;
@@ -2012,12 +2067,13 @@ pub async fn exchange_refresh_token_for_official_tokens(
     if !status.is_success() {
         anyhow::bail!("刷新官方账号 Token 失败 ({status})：{body}");
     }
-    parse_oauth_token_response(&body, Some(refresh_token.trim()))
+    parse_oauth_token_response(&body, Some(refresh_token.trim()), current_id_token)
 }
 
 fn parse_oauth_token_response(
     body: &str,
     previous_refresh_token: Option<&str>,
+    previous_id_token: Option<&str>,
 ) -> anyhow::Result<OfficialTokens> {
     let value: Value = serde_json::from_str(body).context("解析 OAuth Token 响应 JSON 失败")?;
     let access_token = value
@@ -2033,6 +2089,7 @@ fn parse_oauth_token_response(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
+        .or_else(|| previous_id_token.map(ToString::to_string))
         .unwrap_or_else(|| access_token.clone());
     let refresh_token = value
         .get("refresh_token")
@@ -2090,7 +2147,11 @@ pub async fn refresh_official_account_quota(account_id: &str) -> anyhow::Result<
             .filter(|s| !s.trim().is_empty())
         {
             if let Ok(new_tokens) =
-                exchange_refresh_token_for_official_tokens(refresh_tok, proxy.as_deref()).await
+                exchange_refresh_token_for_official_tokens(
+                    refresh_tok,
+                    Some(&current_tokens.id_token),
+                    proxy.as_deref(),
+                ).await
             {
                 current_tokens = new_tokens.clone();
                 persist_account_tokens(account_id, &new_tokens);
@@ -2145,11 +2206,8 @@ async fn send_wham_usage_request(
             format!("Bearer {}", access_token.trim()),
         )
         .header(reqwest::header::ACCEPT, "application/json")
-        .header(reqwest::header::REFERER, "https://chatgpt.com/")
-        .header(
-            reqwest::header::USER_AGENT,
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
-        );
+        .header(reqwest::header::USER_AGENT, codex_client_user_agent())
+        .header("originator", "Codex Desktop");
 
     if let Some(acc_id) = chatgpt_account_id.map(str::trim).filter(|s| !s.is_empty()) {
         req = req.header("ChatGPT-Account-Id", acc_id);
@@ -2685,5 +2743,43 @@ mod tests {
             after_delete_snap.accounts.is_empty(),
             "deleting the last official account must keep the account list empty"
         );
+    }
+
+    #[test]
+    fn parse_oauth_token_response_preserves_previous_id_token_when_omitted() {
+        let raw_without_id_token = r#"{
+            "access_token": "new_access_token_jwt",
+            "refresh_token": "new_refresh_token_secret"
+        }"#;
+        let tokens = parse_oauth_token_response(
+            raw_without_id_token,
+            Some("old_refresh"),
+            Some("old_id_token_jwt"),
+        )
+        .unwrap();
+        assert_eq!(tokens.access_token, "new_access_token_jwt");
+        assert_eq!(tokens.id_token, "old_id_token_jwt");
+        assert_eq!(tokens.refresh_token.as_deref(), Some("new_refresh_token_secret"));
+    }
+
+    #[test]
+    fn deactivate_official_account_for_pure_api_writes_apikey_auth_mode_and_aligns_config() {
+        let temp = tempfile::tempdir().unwrap();
+        let codex_home = temp.path().join("codex-home");
+        std::fs::create_dir_all(&codex_home).unwrap();
+        std::fs::write(
+            codex_home.join("config.toml"),
+            "forced_login_method = \"chatgpt\"\n",
+        )
+        .unwrap();
+
+        deactivate_official_account_for_pure_api(&codex_home, "sk-test-pure-key").unwrap();
+
+        let auth_text = std::fs::read_to_string(codex_home.join("auth.json")).unwrap();
+        let config_text = std::fs::read_to_string(codex_home.join("config.toml")).unwrap();
+        let auth_val: Value = serde_json::from_str(&auth_text).unwrap();
+        assert_eq!(auth_val["auth_mode"], "apikey");
+        assert_eq!(auth_val["OPENAI_API_KEY"], "sk-test-pure-key");
+        assert!(config_text.contains("forced_login_method = \"api\""));
     }
 }

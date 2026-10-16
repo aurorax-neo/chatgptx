@@ -928,7 +928,8 @@ fn launch_codex_multi_instance_blocking(request: CodexMultiLaunchRequest) -> Com
         );
     }
     if let Some(auth_json) = explicit_official_auth_json.as_deref() {
-        let _ = chatgptx_core::settings::atomic_write(&instance_auth, auth_json.as_bytes());
+        let _ = chatgptx_core::official_accounts::write_auth_json_and_sync_store(&codex_home, auth_json);
+        let _ = chatgptx_core::official_accounts::align_forced_login_method_in_config(&codex_home, "chatgpt");
     }
     if is_pure_official_instance {
         let cfg_path = codex_home.join("config.toml");
@@ -975,6 +976,9 @@ fn launch_codex_multi_instance_blocking(request: CodexMultiLaunchRequest) -> Com
             }
             let _ = chatgptx_core::settings::atomic_write(&cfg_path, doc.to_string().as_bytes());
         }
+    } else {
+        let _ = chatgptx_core::official_accounts::align_forced_login_method_in_config(&codex_home, "api");
+        chatgptx_core::official_accounts::delete_codex_keychain_if_present(&codex_home);
     }
     if let Err(error) = absolutize_multi_instance_model_catalog(&codex_home) {
         return failed(
