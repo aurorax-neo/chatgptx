@@ -4551,7 +4551,12 @@ fn complete_relay_profile_config_with_proxy_port(
     profile: &RelayProfile,
     proxy_port: u16,
 ) -> anyhow::Result<String> {
-    let mut doc = parse_toml_document(&profile.config_contents)?;
+    // profile 快照是从 live config.toml 回填/合并出来的用户文本，历史版本会把它写成
+    // 含重复表头的形态（例如 `[mcp_servers.<id>.env]` 出现两次）。这里必须先走与其它
+    // 用户文本入口一致的语义归一化，否则一次「切换官方账号」就会拿严格解析器直接读
+    // 快照，报 `duplicate key env` 而整条切换失败。归一化后重复表会被合并成一份合法 TOML。
+    let normalized_config = normalize_duplicate_toml_text(&profile.config_contents);
+    let mut doc = parse_toml_document(&normalized_config)?;
     let session_provider_id = if profile.relay_mode == RelayMode::Aggregate {
         SettingsStore::default()
             .load()

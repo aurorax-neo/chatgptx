@@ -6852,3 +6852,93 @@ base_url = "https://responses.example.test/v1"
     let config = std::fs::read_to_string(temp.path().join("config.toml")).unwrap();
     assert!(!config.contains("model_catalog_json"), "{config}");
 }
+
+/// 与「切换官方账号」失败相关：pureApi 快照里残留了重复的
+/// `[mcp_servers.<id>.env]` 表头时，保存前归一化必须把重复表合并成一份合法 TOML，
+/// 而不是让严格解析器报 `duplicate key env in table mcp_servers.<id>`。
+fn duplicate_mcp_env_snapshot() -> &'static str {
+    r#"model_provider = "custom"
+
+[model_providers.custom]
+name = "custom"
+wire_api = "responses"
+base_url = "https://relay.example/v1"
+experimental_bearer_token = "sk-test"
+
+[mcp_servers]
+[mcp_servers.node_repl]
+command = "node"
+
+[mcp_servers.chrome-devtools.env]
+PATH = "/usr/bin"
+
+[mcp_servers.rea.env]
+PATH = "/usr/bin"
+
+[mcp_servers.chrome-devtools]
+command = "npx"
+args = ["-y", "chrome-devtools-mcp@latest"]
+[mcp_servers.chrome-devtools.env]
+PATH = "/usr/bin:/bin"
+
+[mcp_servers.rea]
+command = "npx"
+args = ["-y", "rea-agents@6.4.0", "mcp"]
+[mcp_servers.rea.env]
+PATH = "/usr/bin:/bin"
+"#
+}
+
+#[test]
+fn normalize_relay_profile_storage_merges_duplicate_mcp_env_headers() {
+    let mut profile = RelayProfile {
+        id: "default".to_string(),
+        protocol: RelayProtocol::Responses,
+        relay_mode: RelayMode::PureApi,
+        config_contents: duplicate_mcp_env_snapshot().to_string(),
+        ..RelayProfile::default()
+    };
+
+    normalize_relay_profile_for_storage(&mut profile)
+        .expect("带重复 MCP env 表头的快照必须能被归一化，而不是让切换直接失败");
+
+    let doc = profile
+        .config_contents
+        .parse::<toml_edit::DocumentMut>()
+        .expect("归一化后的快照必须是合法 TOML");
+    let chrome = doc["mcp_servers"]["chrome-devtools"]
+        .as_table_like()
+        .expect("chrome-devtools 应是表");
+    assert!(chrome.get("command").is_some(), "{}", profile.config_contents);
+    assert!(chrome.get("env").is_some(), "{}", profile.config_contents);
+    // 重复表头合并后 env 里只应有一份键，不能被写成两段。
+    let env = chrome
+        .get("env")
+        .and_then(|item| item.as_table_like())
+        .expect("env 应是表");
+    assert_eq!(env.len(), 1, "{}", profile.config_contents);
+}
+
+/// 端到端：用同一份脏快照走切换写盘入口，不能因为重复表头报错。
+#[test]
+fn apply_relay_profile_tolerates_duplicate_mcp_env_headers() {
+    let temp = tempfile::tempdir().unwrap();
+    let profile = RelayProfile {
+        id: "default".to_string(),
+        protocol: RelayProtocol::Responses,
+        relay_mode: RelayMode::PureApi,
+        api_key: "sk-test".to_string(),
+        config_contents: duplicate_mcp_env_snapshot().to_string(),
+        ..RelayProfile::default()
+    };
+
+    apply_relay_profile_files_to_home_with_context(temp.path(), &profile, "")
+        .expect("重复 MCP env 表头不该让写盘失败");
+
+    let written = std::fs::read_to_string(temp.path().join("config.toml")).unwrap();
+    let doc = written
+        .parse::<toml_edit::DocumentMut>()
+        .expect("写出的 config.toml 必须是合法 TOML");
+    assert!(doc["mcp_servers"]["chrome-devtools"]["command"].is_str());
+    assert!(doc["mcp_servers"]["chrome-devtools"]["env"].is_table_like());
+}
