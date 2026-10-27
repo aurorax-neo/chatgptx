@@ -287,6 +287,8 @@ type MultiLaunchInstancesResult = CommandResult<{
 
 type BackendSettings = WhaleBalanceSettings & {
   codexAppPath: string;
+  /** 是否在启动时自动同步 models.dev 全网模型元数据。 */
+  autoUpdateModelsDev?: boolean;
   /** 自动接管官方 App（与 Rust `codex_app_auto_takeover` 对应）。 */
   codexAppAutoTakeover: boolean;
   codexAppAutoTakeoverWhenActive: string;
@@ -5627,6 +5629,38 @@ function SettingsScreen({
 }) {
   const tool = toolEntries.find((entry) => entry.id === activeTool);
   const isCodex = activeTool === "codex";
+  const [remoteCatalogStatus, setRemoteCatalogStatus] = useState<{
+    loaded: boolean;
+    has_cache: boolean;
+    model_count: number;
+    provider_count: number;
+    updated_at?: number;
+  } | null>(null);
+  const [fetchingRemoteCatalog, setFetchingRemoteCatalog] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const status = await invoke<{
+          loaded: boolean;
+          has_cache: boolean;
+          model_count: number;
+          provider_count: number;
+          updated_at?: number;
+        }>("get_models_dev_catalog_status");
+        if (!cancelled && status) {
+          setRemoteCatalogStatus(status);
+        }
+      } catch (e) {
+        console.warn("[ChatGPTX] 读取 models.dev 状态失败", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="settings-page">
       <Panel>
@@ -5664,18 +5698,74 @@ function SettingsScreen({
 
           <Panel>
             <CardHead
-              title={t("模型上下文与元数据")}
-              detail={t("管理模型上下文大小、内置目录与官方运行时元数据缓存")}
+              title={t("models.dev 全网模型元数据与上下文")}
+              detail={t("参考 pi-desktop：从 https://models.dev/api.json 联网同步权威大模型元数据，管理各模型上下文窗口大小")}
             />
             <CardContent className="settings-content">
               <div className="settings-block">
                 <div>
-                  <strong>{t("模型元数据缓存")}</strong>
+                  <strong>{t("models.dev 远程全网模型目录")}</strong>
                   <p className="field-hint">
-                    {t("基于官方内置模型规则库（Claude 200k、GPT-4o 128k、o1 200k、DeepSeek 128k、Gemini 1M/2M 等）与本地 ~/.codex/models_cache.json。")}
+                    {remoteCatalogStatus?.has_cache && remoteCatalogStatus.model_count > 0
+                      ? tf("当前已成功同步并缓存 {0} 个模型元数据（涵盖 {1} 个厂商，最近更新：{2}）。", [
+                          remoteCatalogStatus.model_count,
+                          remoteCatalogStatus.provider_count,
+                          remoteCatalogStatus.updated_at
+                            ? new Date(remoteCatalogStatus.updated_at).toLocaleString()
+                            : t("刚刚"),
+                        ])
+                      : t("尚未缓存 models.dev 全网元数据，可点击右侧按钮立即联网同步。同步后将自动覆盖市面上所有主流大模型的标准上下文与输出限制。")}
                   </p>
                 </div>
+                <label className="check-row">
+                  <input
+                    checked={form.autoUpdateModelsDev !== false}
+                    onChange={(event) =>
+                      onFormChange({ ...form, autoUpdateModelsDev: event.currentTarget.checked })
+                    }
+                    type="checkbox"
+                  />
+                  <span>{t("启动 ChatGPTX 时自动检查并同步 models.dev 元数据")}</span>
+                </label>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Button
+                    disabled={fetchingRemoteCatalog}
+                    onClick={async () => {
+                      setFetchingRemoteCatalog(true);
+                      try {
+                        const result = await invoke<{
+                          ok: boolean;
+                          model_count: number;
+                          provider_count: number;
+                          message: string;
+                        }>("fetch_models_dev_catalog");
+                        const status = await invoke<{
+                          loaded: boolean;
+                          has_cache: boolean;
+                          model_count: number;
+                          provider_count: number;
+                          updated_at?: number;
+                        }>("get_models_dev_catalog_status");
+                        if (status) setRemoteCatalogStatus(status);
+                        actions.showMessage(
+                          result?.message || t("已成功联网拉取并更新 models.dev 元数据！")
+                        );
+                      } catch (e) {
+                        actions.showMessage(tf("联网同步 models.dev 失败: {0}", [String(e)]));
+                      } finally {
+                        setFetchingRemoteCatalog(false);
+                      }
+                    }}
+                    type="button"
+                    variant="default"
+                  >
+                    {fetchingRemoteCatalog ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    {fetchingRemoteCatalog ? t("正在联网同步 models.dev…") : t("立即联网更新 models.dev")}
+                  </Button>
                   <Button
                     variant="secondary"
                     onClick={async () => {
@@ -5725,9 +5815,10 @@ function SettingsScreen({
                         actions.showMessage(tf("匹配填充失败: {0}", [String(e)]));
                       }
                     }}
+                    type="button"
                   >
                     <Sparkles className="h-4 w-4" />
-                    {t("批量匹配填充所有供应商")}
+                    {t("按最新元数据匹配填充所有供应商")}
                   </Button>
                   <Button
                     variant="outline"
@@ -5760,9 +5851,29 @@ function SettingsScreen({
                         actions.showMessage(tf("强制重新匹配失败: {0}", [String(e)]));
                       }
                     }}
+                    type="button"
                   >
                     <RotateCcw className="h-4 w-4" />
                     {t("覆盖重新匹配全部上下文")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={async () => {
+                      try {
+                        const result = await invoke<{ count: number; entries: unknown[] }>("refresh_builtin_model_metadata");
+                        actions.showMessage(
+                          result?.count
+                            ? tf("已成功刷新模型元数据，共加载 {0} 个模型条目。", [result.count])
+                            : t("已成功刷新模型元数据。")
+                        );
+                      } catch (e) {
+                        actions.showMessage(tf("刷新模型元数据失败: {0}", [String(e)]));
+                      }
+                    }}
+                    type="button"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    {t("刷新本地运行时缓存")}
                   </Button>
                 </div>
               </div>
@@ -6638,18 +6749,37 @@ function RelayProfileEditor({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const result = await queryBuiltinCommand<{ entries: Array<BuiltinMetadataIndexEntry & { slug: string }> }>("builtin_model_metadata_index");
-      if (cancelled || !result?.entries) return;
-      const map = new Map<string, BuiltinMetadataIndexEntry>();
-      for (const entry of result.entries) {
-        map.set(modelMetadataKey(entry.slug), {
-          source: entry.source,
-          context_window: entry.context_window,
-          auto_compact_token_limit: entry.auto_compact_token_limit,
-          supported_reasoning_levels: entry.supported_reasoning_levels,
-        });
+      const loadIndex = async () => {
+        const result = await queryBuiltinCommand<{ entries: Array<BuiltinMetadataIndexEntry & { slug: string }> }>("builtin_model_metadata_index");
+        if (cancelled || !result?.entries) return;
+        const map = new Map<string, BuiltinMetadataIndexEntry>();
+        for (const entry of result.entries) {
+          map.set(modelMetadataKey(entry.slug), {
+            source: entry.source,
+            context_window: entry.context_window,
+            auto_compact_token_limit: entry.auto_compact_token_limit,
+            supported_reasoning_levels: entry.supported_reasoning_levels,
+          });
+        }
+        setBuiltinIndex(map);
+      };
+
+      await loadIndex();
+
+      // 后台静默检查并更新 models.dev 远程模型元数据目录
+      try {
+        const status = await queryBuiltinCommand<{ has_cache: boolean; updated_at?: number }>("get_models_dev_catalog_status");
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        const shouldSync = !status?.has_cache || Boolean(status.updated_at && Date.now() - status.updated_at > oneDayMs);
+        if (shouldSync) {
+          const fetchRes = await queryBuiltinCommand<{ ok: boolean }>("fetch_models_dev_catalog");
+          if (fetchRes?.ok && !cancelled) {
+            await loadIndex();
+          }
+        }
+      } catch (err) {
+        console.warn("[ChatGPTX] 自动检查同步 models.dev 目录失败", err);
       }
-      setBuiltinIndex(map);
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps

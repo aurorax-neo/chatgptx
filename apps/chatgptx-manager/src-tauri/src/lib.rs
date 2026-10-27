@@ -111,6 +111,8 @@ pub fn run() {
             commands::query_builtin_model_metadata,
             commands::builtin_model_metadata_index,
             commands::refresh_builtin_model_metadata,
+            commands::fetch_models_dev_catalog,
+            commands::get_models_dev_catalog_status,
             commands::load_ccs_providers,
             commands::import_ccs_providers,
             commands::load_pending_provider_import,

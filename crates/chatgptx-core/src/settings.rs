@@ -390,6 +390,9 @@ pub struct BackendSettings {
     pub dictation: DictationSettings,
     #[serde(rename = "codexAppPath", default)]
     pub codex_app_path: String,
+    /// 是否在启动时自动同步 models.dev 全网模型元数据目录。
+    #[serde(rename = "autoUpdateModelsDev", default = "default_true")]
+    pub auto_update_models_dev: bool,
     /// 自动接管官方 App：开启后用户自己双击启动官方 App 时由 ChatGPTX 接管并注入。
     #[serde(rename = "codexAppAutoTakeover", default)]
     pub codex_app_auto_takeover: bool,
@@ -589,6 +592,7 @@ impl Default for BackendSettings {
         Self {
             dictation: DictationSettings::default(),
             codex_app_path: String::new(),
+            auto_update_models_dev: true,
             codex_app_auto_takeover: false,
             codex_app_auto_takeover_when_active: default_auto_takeover_when_active(),
             codex_extra_args: Vec::new(),

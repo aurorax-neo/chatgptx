@@ -548,6 +548,13 @@ fn resolve_builtin_metadata(slug: &str) -> Option<ResolvedBuiltinMetadata> {
             entry,
         });
     }
+    if let Some(entry) = crate::remote_model_catalog::query_models_dev_catalog(&slug) {
+        return Some(ResolvedBuiltinMetadata {
+            slug,
+            source: "models.dev",
+            entry,
+        });
+    }
     bundled_template_entry(&slug).map(|entry| ResolvedBuiltinMetadata {
         slug,
         source: "官方内置",
@@ -591,6 +598,10 @@ pub fn builtin_model_metadata_index() -> Vec<Value> {
     }
     if let Some(models) = runtime_models_catalog() {
         collect_candidates(&models, &mut candidate_seen, &mut candidate_slugs);
+    }
+    let remote_models = crate::remote_model_catalog::all_cached_models_dev_models();
+    if !remote_models.is_empty() {
+        collect_candidates(&remote_models, &mut candidate_seen, &mut candidate_slugs);
     }
     collect_candidates(bundled_catalog_models(), &mut candidate_seen, &mut candidate_slugs);
 

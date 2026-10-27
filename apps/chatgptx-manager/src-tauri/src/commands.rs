@@ -2645,6 +2645,26 @@ pub fn refresh_builtin_model_metadata() -> CommandResult<Value> {
 }
 
 #[tauri::command]
+pub async fn fetch_models_dev_catalog() -> CommandResult<Value> {
+    match chatgptx_core::remote_model_catalog::fetch_and_cache_models_dev_catalog().await {
+        Ok(result) => ok(
+            &result.message,
+            serde_json::to_value(&result).unwrap_or_default(),
+        ),
+        Err(err) => failed(&format!("同步 models.dev 元数据失败: {err}"), json!({})),
+    }
+}
+
+#[tauri::command]
+pub fn get_models_dev_catalog_status() -> CommandResult<Value> {
+    let status = chatgptx_core::remote_model_catalog::get_models_dev_catalog_status();
+    ok(
+        "models.dev 元数据状态已读取。",
+        serde_json::to_value(&status).unwrap_or_default(),
+    )
+}
+
+#[tauri::command]
 pub fn find_desktop_codex_cli() -> CommandResult<Value> {
     // Windows 标准路径：桌面版在用户目录维护、可直接运行的 CLI。
     // Store 包目录（WindowsApps）内的资源受系统保护，第三方进程无法执行（#2028），

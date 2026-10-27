@@ -509,6 +509,17 @@ export const EN_PLAIN: Record<string, string> = {
   "无匹配项": "No match",
   "清空上下文窗口": "Clear context window",
   "模型上下文与元数据": "Model context and metadata",
+  "models.dev 全网模型元数据与上下文": "models.dev global model metadata and context",
+  "参考 pi-desktop：从 https://models.dev/api.json 联网同步权威大模型元数据，管理各模型上下文窗口大小":
+    "Reference pi-desktop: Sync authoritative LLM metadata from https://models.dev/api.json, manage per-model context window sizes",
+  "models.dev 远程全网模型目录": "models.dev remote global model catalog",
+  "尚未缓存 models.dev 全网元数据，可点击右侧按钮立即联网同步。同步后将自动覆盖市面上所有主流大模型的标准上下文与输出限制。":
+    "models.dev metadata not cached yet. Click the button to sync global model metadata. Once synced, standard context and output limits for all major models will be automatically supported.",
+  "启动 ChatGPTX 时自动检查并同步 models.dev 元数据": "Automatically check and sync models.dev metadata on ChatGPTX startup",
+  "正在联网同步 models.dev…": "Syncing models.dev…",
+  "立即联网更新 models.dev": "Sync models.dev now",
+  "已成功联网拉取并更新 models.dev 元数据！": "Successfully fetched and updated models.dev metadata!",
+  "刚刚": "Just now",
   "管理模型上下文大小、内置目录与官方运行时元数据缓存": "Manage model context windows, built-in catalogs, and official runtime metadata cache",
   "模型元数据缓存": "Model metadata cache",
   "基于官方内置模型规则库（Claude 200k、GPT-4o 128k、o1 200k、DeepSeek 128k、Gemini 1M/2M 等）与本地 ~/.codex/models_cache.json。":
@@ -1476,6 +1487,9 @@ export const EN_TEMPLATE: Record<string, string> = {
   "查看插件 {0} 的详情": "View details for plugin {0}",
   "共 {0} 个插件，匹配 {1} 个": "{0} plugins, {1} matches",
   "正在下载并安装 {0}…": "Downloading and installing {0}…",
+  "当前已成功同步并缓存 {0} 个模型元数据（涵盖 {1} 个厂商，最近更新：{2}）。":
+    "Successfully synced and cached {0} model metadata entries across {1} providers (last updated: {2}).",
+  "联网同步 models.dev 失败: {0}": "Failed to sync models.dev: {0}",
   "已成功刷新模型元数据，共加载 {0} 个模型条目。": "Successfully refreshed model metadata, loaded {0} entries in total.",
   "刷新模型元数据失败: {0}": "Failed to refresh model metadata: {0}",
   "已自动为 {0} 个供应商中的 {1} 个模型填充了上下文大小，请记得保存设置。":
