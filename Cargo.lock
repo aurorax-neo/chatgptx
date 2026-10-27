@@ -425,7 +425,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chatgptx-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -457,7 +457,7 @@ dependencies = [
 
 [[package]]
 name = "chatgptx-data"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -476,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "chatgptx-launcher"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -490,7 +490,7 @@ dependencies = [
 
 [[package]]
 name = "chatgptx-manager"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
