@@ -499,6 +499,15 @@ export const EN_PLAIN: Record<string, string> = {
   "从 Word 等富文本粘贴到 Codex composer 时只保留纯文本，避免被识别为图片/文件附件。需重启 Codex 才生效。":
     "Keeps only plain text when pasting rich text (e.g. from Word) into the Codex composer, avoiding it being treated as an image/file attachment. Requires restarting Codex.",
   "从上游获取": "Fetch from upstream",
+  "匹配填充": "Match and Fill",
+  "根据模型名称自动匹配并填充上下文窗口大小": "Auto-match and fill context window size based on model name",
+  "常用档位与匹配": "Presets and matching",
+  "常用预设档位": "Preset sizes",
+  "上下文窗口档位与匹配": "Context window presets and matching",
+  "填入匹配值": "Fill matched value",
+  "未在目录中匹配到该模型": "Model not matched in catalog",
+  "无匹配项": "No match",
+  "清空上下文窗口": "Clear context window",
   "从环境变量和 config.toml 的 /v1/models 拉取模型并补进模型列表。":
     "Pull models from environment variables and config.toml's /v1/models and add them to the model list.",
   "从第三方导入": "Import from third party",

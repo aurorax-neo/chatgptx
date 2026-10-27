@@ -1,0 +1,84 @@
+{
+  "models": [
+    {
+      "slug": "claude-3-5-sonnet",
+      "display_name": "Claude 3.5 Sonnet",
+      "description": "Anthropic workhorse model for coding and agent workflows (200k context)",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        { "effort": "low", "description": "Fast concise responses" },
+        { "effort": "medium", "description": "Standard thinking effort" },
+        { "effort": "high", "description": "Thorough step-by-step thinking" }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 0,
+      "base_instructions": "",
+      "context_window": 200000,
+      "max_context_window": 200000,
+      "max_output_tokens": 8192,
+      "effective_context_window_percent": 95,
+      "supports_parallel_tool_calls": true,
+      "input_modalities": ["text", "image"]
+    },
+    {
+      "slug": "claude-3-7-sonnet",
+      "display_name": "Claude 3.7 Sonnet",
+      "description": "Anthropic hybrid reasoning model with dynamic thinking (200k context)",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        { "effort": "low", "description": "Light reasoning" },
+        { "effort": "medium", "description": "Balanced reasoning (default)" },
+        { "effort": "high", "description": "Deep extended reasoning" }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 1,
+      "base_instructions": "",
+      "context_window": 200000,
+      "max_context_window": 200000,
+      "max_output_tokens": 64000,
+      "effective_context_window_percent": 95,
+      "supports_parallel_tool_calls": true,
+      "input_modalities": ["text", "image"]
+    },
+    {
+      "slug": "claude-3-5-haiku",
+      "display_name": "Claude 3.5 Haiku",
+      "description": "Anthropic fast and lightweight model (200k context)",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 2,
+      "base_instructions": "",
+      "context_window": 200000,
+      "max_context_window": 200000,
+      "max_output_tokens": 8192,
+      "effective_context_window_percent": 95,
+      "supports_parallel_tool_calls": true,
+      "input_modalities": ["text", "image"]
+    },
+    {
+      "slug": "claude-3-opus",
+      "display_name": "Claude 3 Opus",
+      "description": "Anthropic powerful model for highly complex tasks (200k context)",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 3,
+      "base_instructions": "",
+      "context_window": 200000,
+      "max_context_window": 200000,
+      "max_output_tokens": 4096,
+      "effective_context_window_percent": 95,
+      "supports_parallel_tool_calls": true,
+      "input_modalities": ["text", "image"]
+    }
+  ]
+}

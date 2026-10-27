@@ -1,0 +1,102 @@
+{
+  "models": [
+    {
+      "slug": "gpt-4o",
+      "display_name": "GPT-4o",
+      "description": "OpenAI flagship multimodal flagship model (128k context)",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 0,
+      "base_instructions": "",
+      "context_window": 128000,
+      "max_context_window": 128000,
+      "max_output_tokens": 16384,
+      "effective_context_window_percent": 95,
+      "supports_parallel_tool_calls": true,
+      "input_modalities": ["text", "image"]
+    },
+    {
+      "slug": "gpt-4o-mini",
+      "display_name": "GPT-4o mini",
+      "description": "OpenAI fast and affordable model (128k context)",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 1,
+      "base_instructions": "",
+      "context_window": 128000,
+      "max_context_window": 128000,
+      "max_output_tokens": 16384,
+      "effective_context_window_percent": 95,
+      "supports_parallel_tool_calls": true,
+      "input_modalities": ["text", "image"]
+    },
+    {
+      "slug": "o1",
+      "display_name": "o1",
+      "description": "OpenAI deep reasoning model for complex code and math (200k context)",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        { "effort": "low", "description": "Faster response" },
+        { "effort": "medium", "description": "Balanced reasoning (default)" },
+        { "effort": "high", "description": "Deep thinking" }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 2,
+      "base_instructions": "",
+      "context_window": 200000,
+      "max_context_window": 200000,
+      "max_output_tokens": 100000,
+      "effective_context_window_percent": 95,
+      "supports_parallel_tool_calls": true,
+      "input_modalities": ["text", "image"]
+    },
+    {
+      "slug": "o3-mini",
+      "display_name": "o3-mini",
+      "description": "OpenAI high-speed reasoning model (200k context)",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        { "effort": "low", "description": "Fast response" },
+        { "effort": "medium", "description": "Balanced thinking (default)" },
+        { "effort": "high", "description": "Deep thinking" }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 3,
+      "base_instructions": "",
+      "context_window": 200000,
+      "max_context_window": 200000,
+      "max_output_tokens": 100000,
+      "effective_context_window_percent": 95,
+      "supports_parallel_tool_calls": true,
+      "input_modalities": ["text"]
+    },
+    {
+      "slug": "gpt-4-turbo",
+      "display_name": "GPT-4 Turbo",
+      "description": "OpenAI previous generation flagship (128k context)",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 4,
+      "base_instructions": "",
+      "context_window": 128000,
+      "max_context_window": 128000,
+      "max_output_tokens": 4096,
+      "effective_context_window_percent": 95,
+      "supports_parallel_tool_calls": true,
+      "input_modalities": ["text", "image"]
+    }
+  ]
+}

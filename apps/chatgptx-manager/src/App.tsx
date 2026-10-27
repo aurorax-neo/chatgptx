@@ -70,6 +70,7 @@ import {
   Star,
   Store,
   Stethoscope,
+  Sparkles,
   Sun,
   TestTube,
   Trash2,
@@ -167,6 +168,11 @@ import {
   type ModelWindowRowsValidationIssue,
   type ModelWindowRow,
 } from "./model-windows";
+import {
+  autoFillModelWindowRows,
+  matchContextWindowForModel,
+} from "./model-limit-presets";
+import { ContextWindowCell } from "./ContextWindowCell";
 import {
   formatReasoningLevelsLabel,
   normalizeReasoningLevels,
@@ -6659,9 +6665,10 @@ function RelayProfileEditor({
     const row = modelWindowRows[index];
     if (!row) return;
     const patch = builtinRowBackfillValue(slug, row.window, row.autoCompact, builtinIndex.get(modelMetadataKey(slug)));
-    if (patch.window || patch.autoCompact) {
+    const matchedWindow = patch.window || (!row.window.trim() ? matchContextWindowForModel(slug, builtinIndex) : null);
+    if (matchedWindow || patch.autoCompact) {
       updateModelWindowRow(index, {
-        ...(patch.window ? { window: patch.window } : {}),
+        ...(matchedWindow ? { window: matchedWindow } : {}),
         ...(patch.autoCompact ? { autoCompact: patch.autoCompact } : {}),
       });
     }
@@ -6948,10 +6955,11 @@ function RelayProfileEditor({
       if (row.window.trim() && row.autoCompact.trim()) return row;
       const entry = builtinIndex.get(modelMetadataKey(row.model));
       const patch = builtinRowBackfillValue(row.model, row.window, row.autoCompact, entry);
-      return patch.window || patch.autoCompact
+      const matchedWindow = patch.window || (!row.window.trim() ? matchContextWindowForModel(row.model, builtinIndex) : null);
+      return matchedWindow || patch.autoCompact
         ? {
             ...row,
-            ...(patch.window ? { window: patch.window } : {}),
+            ...(matchedWindow ? { window: matchedWindow } : {}),
             ...(patch.autoCompact ? { autoCompact: patch.autoCompact } : {}),
           }
         : row;
@@ -7102,6 +7110,22 @@ function RelayProfileEditor({
                     </Button>
                     <Button
                       disabled={!modelWindowRows.some((row) => row.model.trim())}
+                      onClick={() => {
+                        const { rows: nextRows, filledCount } = autoFillModelWindowRows(modelWindowRows, builtinIndex);
+                        if (filledCount > 0) {
+                          setModelWindowRows(nextRows);
+                        }
+                      }}
+                      size="sm"
+                      title={t("根据模型名称自动匹配并填充上下文窗口大小")}
+                      type="button"
+                      variant="secondary"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {t("匹配填充")}
+                    </Button>
+                    <Button
+                      disabled={!modelWindowRows.some((row) => row.model.trim())}
                       onClick={() => setModelWindowRows([])}
                       size="sm"
                       title={t("清空模型")}
@@ -7195,11 +7219,12 @@ function RelayProfileEditor({
                           </div>
                           <div className="relay-model-cell relay-model-cell-window">
                             <span className="relay-model-cell-label">{t("上下文窗口")}</span>
-                            <Input
-                              aria-label={t("上下文窗口")}
+                            <ContextWindowCell
+                              modelName={row.model}
                               value={row.window}
-                              onChange={(event) => {
-                                const window = event.currentTarget.value;
+                              builtinIndex={builtinIndex}
+                              placeholder="1M"
+                              onChange={(window) => {
                                 updateModelWindowRow(index, { window });
                                 // 导入面板尚未粘贴 JSON 时，只编辑模型行；不要把空文档同步失败显示成错误。
                                 if (!importing || !metadataImportDocument.trim() || !metadataImportPreview) return;
@@ -7220,7 +7245,6 @@ function RelayProfileEditor({
                                 setMetadataImportPreview(synchronized.preview);
                                 setMetadataImportError("");
                               }}
-                              placeholder="1M"
                             />
                           </div>
                           <div className="relay-model-cell relay-model-cell-compact">

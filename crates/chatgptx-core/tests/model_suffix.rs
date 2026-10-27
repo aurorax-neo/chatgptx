@@ -926,3 +926,28 @@ fn kimi_builtin_metadata_disables_search_tool() {
         serde_json::from_str(&build_model_catalog_json(&entries, None)).unwrap();
     assert_eq!(catalog["models"][0]["supports_search_tool"], false);
 }
+
+/// 智能匹配测试：支持跨路由前缀、日期快照剥离、别名匹配及主流 Claude/OpenAI 窗口回填。
+#[test]
+fn builtin_metadata_matches_path_prefix_and_release_suffixes() {
+    // Claude 跨前缀与快照
+    let claude = builtin_model_metadata("claude-3-5-sonnet").expect("claude-3-5-sonnet 内置");
+    assert_eq!(claude.entry["context_window"], 200_000);
+
+    let claude_prefix = builtin_model_metadata("anthropic/claude-3-7-sonnet").expect("前缀 claude 命中");
+    assert_eq!(claude_prefix.entry["context_window"], 200_000);
+
+    let claude_snapshot = builtin_model_metadata("anthropic/claude-3-5-sonnet-20241022").expect("快照 claude 命中");
+    assert_eq!(claude_snapshot.entry["context_window"], 200_000);
+
+    // OpenAI 跨前缀与快照
+    let gpt4o = builtin_model_metadata("openai/gpt-4o-2024-08-06").expect("gpt-4o 快照命中");
+    assert_eq!(gpt4o.entry["context_window"], 128_000);
+
+    let o3_mini = builtin_model_metadata("o3-mini").expect("o3-mini 命中");
+    assert_eq!(o3_mini.entry["context_window"], 200_000);
+
+    // DeepSeek 别名
+    let ds_chat = builtin_model_metadata("deepseek-chat").expect("deepseek-chat 别名命中");
+    assert_eq!(ds_chat.entry["context_window"], 1_048_576);
+}

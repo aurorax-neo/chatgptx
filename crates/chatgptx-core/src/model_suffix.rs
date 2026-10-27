@@ -312,6 +312,20 @@ const COMPATIBILITY_METADATA_SOURCES: &[(&'static str, &'static str)] = &[
     ),
     (GPT6_SOL_LUNA_METADATA_JSON, "gpt-6 Sol/Luna 兼容"),
     (GPT61_SOL_METADATA_JSON, "gpt-6.1 Sol 兼容"),
+    (
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/claude-model-metadata.json"
+        )),
+        "Claude",
+    ),
+    (
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/openai-model-metadata.json"
+        )),
+        "OpenAI",
+    ),
 ];
 
 /// 该 slug 是否需要落一份内置元数据 catalog（无用户窗口/元数据时也要生成）。
@@ -802,19 +816,125 @@ fn runtime_models_catalog() -> Option<Vec<Value>> {
     with_runtime_models(|models| models.to_vec())
 }
 
-/// 按 slug 查找 catalog 条目：先精确匹配，未命中再按大小写不敏感匹配。
+fn path_leaf(s: &str) -> &str {
+    s.rsplit('/').next().unwrap_or(s)
+}
+
+/// 剥离日期版本后缀（例如 gpt-4o-2024-08-06 -> gpt-4o, deepseek-v4-flash-0731 -> deepseek-v4-flash）
+fn strip_model_release_suffix(s: &str) -> &str {
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    if len >= 11 {
+        let sep = bytes[len - 6];
+        let sep2 = bytes[len - 3];
+        if (sep == b'-' || sep == b'_' || sep == b'.') && sep == sep2 {
+            let prefix_sep = bytes[len - 11];
+            if prefix_sep == b'-' || prefix_sep == b'_' || prefix_sep == b'.' {
+                let y = &s[len - 10..len - 6];
+                let m = &s[len - 5..len - 3];
+                let d = &s[len - 2..];
+                if y.chars().all(|c| c.is_ascii_digit())
+                    && m.chars().all(|c| c.is_ascii_digit())
+                    && d.chars().all(|c| c.is_ascii_digit())
+                {
+                    return &s[..len - 11];
+                }
+            }
+        }
+    }
+    if len >= 9 && (bytes[len - 9] == b'-' || bytes[len - 9] == b'_') {
+        let digits = &s[len - 8..];
+        if digits.starts_with("20") && digits.chars().all(|c| c.is_ascii_digit()) {
+            return &s[..len - 9];
+        }
+    }
+    if len >= 5 && (bytes[len - 5] == b'-' || bytes[len - 5] == b'_') {
+        let digits = &s[len - 4..];
+        if digits.chars().all(|c| c.is_ascii_digit()) {
+            if let Ok(month) = digits[..2].parse::<u32>() {
+                if let Ok(day) = digits[2..].parse::<u32>() {
+                    if (1..=12).contains(&month) && (1..=31).contains(&day) {
+                        return &s[..len - 5];
+                    }
+                }
+            }
+        }
+    }
+    s
+}
+
+/// 按 slug 查找 catalog 条目：
+/// 1. 精确匹配；
+/// 2. 大小写不敏感匹配；
+/// 3. 剥离路径前缀后匹配（如 openai/gpt-4o -> gpt-4o）；
+/// 4. 剥离日期后缀后匹配（如 gpt-4o-2024-08-06 -> gpt-4o）；
+/// 5. 剥离路径前缀与日期后缀后匹配；
+/// 6. 常见别名匹配（如 deepseek-chat -> deepseek-v4-flash）。
 fn find_catalog_entry<'a>(models: &'a [Value], slug: &str) -> Option<&'a Value> {
-    models
+    if let Some(entry) = models
         .iter()
         .find(|entry| entry.get("slug").and_then(Value::as_str) == Some(slug))
-        .or_else(|| {
-            models.iter().find(|entry| {
-                entry
-                    .get("slug")
-                    .and_then(Value::as_str)
-                    .is_some_and(|candidate| candidate.eq_ignore_ascii_case(slug))
-            })
-        })
+    {
+        return Some(entry);
+    }
+    if let Some(entry) = models.iter().find(|entry| {
+        entry
+            .get("slug")
+            .and_then(Value::as_str)
+            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(slug))
+    }) {
+        return Some(entry);
+    }
+    let leaf = path_leaf(slug);
+    if leaf != slug {
+        if let Some(entry) = models.iter().find(|entry| {
+            entry
+                .get("slug")
+                .and_then(Value::as_str)
+                .is_some_and(|candidate| candidate.eq_ignore_ascii_case(leaf))
+        }) {
+            return Some(entry);
+        }
+    }
+    let stripped = strip_model_release_suffix(slug);
+    if stripped != slug {
+        if let Some(entry) = models.iter().find(|entry| {
+            entry
+                .get("slug")
+                .and_then(Value::as_str)
+                .is_some_and(|candidate| candidate.eq_ignore_ascii_case(stripped))
+        }) {
+            return Some(entry);
+        }
+    }
+    let stripped_leaf = strip_model_release_suffix(leaf);
+    if stripped_leaf != slug && stripped_leaf != leaf && stripped_leaf != stripped {
+        if let Some(entry) = models.iter().find(|entry| {
+            entry
+                .get("slug")
+                .and_then(Value::as_str)
+                .is_some_and(|candidate| candidate.eq_ignore_ascii_case(stripped_leaf))
+        }) {
+            return Some(entry);
+        }
+    }
+    let alias = match stripped_leaf.to_ascii_lowercase().as_str() {
+        "deepseek-chat" => Some("deepseek-v4-flash"),
+        "deepseek-reasoner" => Some("deepseek-v4-pro"),
+        "chatgpt-4o-latest" => Some("gpt-4o"),
+        _ => None,
+    };
+    if let Some(alias_slug) = alias {
+        if let Some(entry) = models.iter().find(|entry| {
+            entry
+                .get("slug")
+                .and_then(Value::as_str)
+                .is_some_and(|candidate| candidate.eq_ignore_ascii_case(alias_slug))
+        }) {
+            return Some(entry);
+        }
+    }
+    None
 }
 
 #[doc(hidden)]
