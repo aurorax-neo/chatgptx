@@ -1,4 +1,5 @@
 import { modelSlugFromRowName, suffixWindowString } from "./model-metadata.ts";
+import { modelWindowRowsFromProfile, serializeModelWindowRows } from "./model-windows.ts";
 
 export type LimitPreset = {
   label: string;
@@ -76,6 +77,12 @@ export function matchPresetIndex(
 /// 剥离日期版本后缀（例如 gpt-4o-2024-08-06 -> gpt-4o, claude-3-5-sonnet-20241022 -> claude-3-5-sonnet）。
 export function stripReleaseSuffix(value: string): string {
   const trimmed = value.trim();
+  // 剥离 -latest, _latest, :latest
+  const latestMatch = trimmed.match(/^(.+?)[-_:]latest$/i);
+  if (latestMatch) return stripReleaseSuffix(latestMatch[1]);
+  // 剥离 :tag 形式的日期 (如 :20240806, :2024-08-06)
+  const colonTagMatch = trimmed.match(/^(.+?):202\d[-_.]?(?:0[1-9]|1[0-2])[-_.]?(?:0[1-9]|[12]\d|3[01])$/i);
+  if (colonTagMatch) return colonTagMatch[1];
   // -YYYY-MM-DD 或 -YYYY_MM_DD 或 -YYYY.MM.DD
   const dateSepMatch = trimmed.match(/^(.+?)[-_.]202\d[-_.](?:0[1-9]|1[0-2])[-_.](?:0[1-9]|[12]\d|3[01])$/i);
   if (dateSepMatch) return dateSepMatch[1];
@@ -95,6 +102,19 @@ export function pathLeaf(value: string): string {
   return idx >= 0 ? trimmed.slice(idx + 1) : trimmed;
 }
 
+/// 生成点与横杠互换的版本号别名候选（如 claude-3.5-sonnet <-> claude-3-5-sonnet）
+export function notationCandidates(value: string): string[] {
+  const trimmed = value.trim();
+  const set = new Set<string>([trimmed]);
+  // 3.5 -> 3-5, 3.7 -> 3-7, 4.1 -> 4-1, 5.3 -> 5-3
+  const dashed = trimmed.replace(/(\d+)\.(\d+)/g, "$1-$2");
+  set.add(dashed);
+  // 3-5 -> 3.5
+  const dotted = trimmed.replace(/(\d+)-(\d+)/g, "$1.$2");
+  set.add(dotted);
+  return Array.from(set);
+}
+
 /// 从模型名称中识别内嵌的上下文窗口尺寸（如 llama-3.1-8b-instruct-128k, moonshot-v1-32k, glm-4-9b-chat-1m 等）。
 export function inferContextWindowFromModelName(modelName: string): string | null {
   const leaf = pathLeaf(modelSlugFromRowName(modelName));
@@ -112,11 +132,17 @@ export function inferContextWindowFromModelName(modelName: string): string | nul
 
 /// 常见公认大模型的标准上下文窗口常数表（针对主流原厂与广泛兼容网关模型）。
 const KNOWN_MODEL_CONTEXT_WINDOWS: ReadonlyArray<[RegExp, string]> = [
+  // 优先匹配长上下文专有模型标识
+  [/(?:qwen-long|glm-4-long)/i, "1M"],
+  [/^moonshot-v1-8k/i, "8k"],
+  [/^moonshot-v1-32k/i, "32k"],
+  [/^moonshot-v1-128k/i, "128k"],
   // Claude 3 / 3.5 / 3.7 系列均标配 200k
   [/^claude-(?:3|3[-.]5|3[-.]7|4)/i, "200k"],
   // OpenAI o1 / o3 系列（o1, o1-preview 128k/200k, o3-mini 200k）
   [/^o1-(?:mini|preview)/i, "128k"],
   [/^o[13](?:-mini|-preview)?$/i, "200k"],
+  [/^gpt-4[-.]1/i, "1M"],
   [/^gpt-5/i, "272k"],
   [/^gpt-4o/i, "128k"],
   [/^gpt-4-turbo/i, "128k"],
@@ -126,6 +152,10 @@ const KNOWN_MODEL_CONTEXT_WINDOWS: ReadonlyArray<[RegExp, string]> = [
   // Google Gemini 官方标准窗口 Flash 为 1M，Pro 为 2M
   [/^gemini-.*pro/i, "2M"],
   [/^gemini-(?:1[-.]5|2[-.]0|3[-.]\d)/i, "1M"],
+  // xAI Grok 系列
+  [/^grok-4/i, "500k"],
+  [/^grok-3/i, "1M"],
+  [/^grok-(?:2|beta)/i, "128k"],
   // 智谱 GLM-4 / GLM-5 系列
   [/^glm-(?:4|5)(?:-plus|-air|-flash|-long)?/i, "128k"],
   // 阿里通义千问 Qwen 2.5 / 3 系列（turbo/plus 为 128k，max 为 32k/128k）
@@ -166,11 +196,13 @@ export function matchContextWindowForModel(
 
   // 2. 内置元数据索引查询
   if (builtinIndex && builtinIndex.size > 0) {
-    const candidates = [
-      cleanSlug.toLowerCase(),
-      leaf.toLowerCase(),
-      strippedLeaf.toLowerCase(),
-    ];
+    const candidateKeys = new Set<string>();
+    for (const base of [cleanSlug, leaf, strippedLeaf]) {
+      for (const variant of notationCandidates(base)) {
+        candidateKeys.add(variant.toLowerCase());
+      }
+    }
+    const candidates = Array.from(candidateKeys);
     for (const key of candidates) {
       const hit = builtinIndex.get(key);
       if (
@@ -185,8 +217,13 @@ export function matchContextWindowForModel(
   }
 
   // 3. 常见公认大模型规则表匹配
+  const allVariants = [
+    ...notationCandidates(leaf),
+    ...notationCandidates(strippedLeaf),
+    ...notationCandidates(cleanSlug),
+  ];
   for (const [pattern, window] of KNOWN_MODEL_CONTEXT_WINDOWS) {
-    if (pattern.test(leaf) || pattern.test(strippedLeaf) || pattern.test(cleanSlug)) {
+    if (allVariants.some((v) => pattern.test(v))) {
       return window;
     }
   }
@@ -226,4 +263,50 @@ export function autoFillModelWindowRows<T extends ModelWindowRowLike>(
     return row;
   });
   return { rows: next, filledCount };
+}
+
+export type ProfileLike = {
+  id: string;
+  name: string;
+  modelList: string;
+  modelWindows: string;
+  modelVlm?: string;
+  modelAutoCompact?: string;
+};
+
+/// 为所有供应商配置批量智能匹配并填充上下文窗口大小
+export function autoFillAllProfilesContextWindows<T extends ProfileLike>(
+  profiles: T[],
+  builtinIndex?: BuiltinIndexLike,
+  options: { overwrite?: boolean } = {},
+): { profiles: T[]; updatedProfilesCount: number; updatedModelsCount: number } {
+  let updatedProfilesCount = 0;
+  let updatedModelsCount = 0;
+
+  const nextProfiles = profiles.map((profile) => {
+    const rows = modelWindowRowsFromProfile(
+      profile.modelList,
+      profile.modelWindows,
+      profile.modelVlm,
+      profile.modelAutoCompact,
+    );
+    if (rows.length === 0) return profile;
+
+    const { rows: nextRows, filledCount } = autoFillModelWindowRows(rows, builtinIndex, options);
+    if (filledCount === 0) return profile;
+
+    updatedProfilesCount += 1;
+    updatedModelsCount += filledCount;
+
+    const serialized = serializeModelWindowRows(nextRows);
+    return {
+      ...profile,
+      modelList: serialized.modelList,
+      modelWindows: serialized.modelWindows,
+      modelVlm: serialized.modelVlm,
+      modelAutoCompact: serialized.modelAutoCompact,
+    };
+  });
+
+  return { profiles: nextProfiles, updatedProfilesCount, updatedModelsCount };
 }

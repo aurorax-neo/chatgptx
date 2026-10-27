@@ -110,6 +110,7 @@ pub fn run() {
             commands::find_desktop_codex_cli,
             commands::query_builtin_model_metadata,
             commands::builtin_model_metadata_index,
+            commands::refresh_builtin_model_metadata,
             commands::load_ccs_providers,
             commands::import_ccs_providers,
             commands::load_pending_provider_import,

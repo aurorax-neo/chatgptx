@@ -10,6 +10,7 @@ import {
   inferContextWindowFromModelName,
   matchContextWindowForModel,
   autoFillModelWindowRows,
+  autoFillAllProfilesContextWindows,
 } from "./model-limit-presets.ts";
 
 test("预设梯子包含常用的上下文窗口尺寸", () => {
@@ -122,4 +123,35 @@ test("autoFillModelWindowRows 批量填充模型行", () => {
   const overwriteResult = autoFillModelWindowRows(rows, undefined, { overwrite: true });
   assert.equal(overwriteResult.filledCount, 3);
   assert.equal(overwriteResult.rows[1].window, "128k");
+});
+
+test("autoFillAllProfilesContextWindows 批量为多个供应商更新上下文", () => {
+  const profiles = [
+    {
+      id: "p1",
+      name: "Provider 1",
+      modelList: "claude-3-5-sonnet\ngpt-4o",
+      modelWindows: JSON.stringify({}),
+    },
+    {
+      id: "p2",
+      name: "Provider 2",
+      modelList: "deepseek-chat",
+      modelWindows: JSON.stringify({ "deepseek-chat": "64k" }), // 已有值
+    },
+  ];
+  const result = autoFillAllProfilesContextWindows(profiles);
+  assert.equal(result.updatedProfilesCount, 1);
+  assert.equal(result.updatedModelsCount, 2);
+
+  const windows1 = JSON.parse(result.profiles[0].modelWindows);
+  assert.equal(windows1["claude-3-5-sonnet"], "200k");
+  assert.equal(windows1["gpt-4o"], "128k");
+
+  // 覆盖测试
+  const overwrite = autoFillAllProfilesContextWindows(profiles, undefined, { overwrite: true });
+  assert.equal(overwrite.updatedProfilesCount, 2);
+  assert.equal(overwrite.updatedModelsCount, 3);
+  const windows2 = JSON.parse(overwrite.profiles[1].modelWindows);
+  assert.equal(windows2["deepseek-chat"], "128k");
 });

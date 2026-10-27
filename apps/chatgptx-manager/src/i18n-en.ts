@@ -508,6 +508,18 @@ export const EN_PLAIN: Record<string, string> = {
   "未在目录中匹配到该模型": "Model not matched in catalog",
   "无匹配项": "No match",
   "清空上下文窗口": "Clear context window",
+  "模型上下文与元数据": "Model context and metadata",
+  "管理模型上下文大小、内置目录与官方运行时元数据缓存": "Manage model context windows, built-in catalogs, and official runtime metadata cache",
+  "模型元数据缓存": "Model metadata cache",
+  "基于官方内置模型规则库（Claude 200k、GPT-4o 128k、o1 200k、DeepSeek 128k、Gemini 1M/2M 等）与本地 ~/.codex/models_cache.json。":
+    "Based on official built-in model rules (Claude 200k, GPT-4o 128k, o1 200k, DeepSeek 128k, Gemini 1M/2M, etc.) and local ~/.codex/models_cache.json.",
+  "刷新元数据缓存": "Refresh metadata cache",
+  "已成功刷新模型元数据。": "Successfully refreshed model metadata.",
+  "批量匹配填充所有供应商": "Match and fill for all providers",
+  "覆盖重新匹配全部上下文": "Overwrite match for all providers",
+  "所有供应商的模型上下文大小已是最新或已手动指定，无需填充。":
+    "Model context windows for all providers are already up to date or manually specified.",
+  "未发现需要更新的模型。": "No models need updating.",
   "从环境变量和 config.toml 的 /v1/models 拉取模型并补进模型列表。":
     "Pull models from environment variables and config.toml's /v1/models and add them to the model list.",
   "从第三方导入": "Import from third party",
@@ -1464,6 +1476,14 @@ export const EN_TEMPLATE: Record<string, string> = {
   "查看插件 {0} 的详情": "View details for plugin {0}",
   "共 {0} 个插件，匹配 {1} 个": "{0} plugins, {1} matches",
   "正在下载并安装 {0}…": "Downloading and installing {0}…",
+  "已成功刷新模型元数据，共加载 {0} 个模型条目。": "Successfully refreshed model metadata, loaded {0} entries in total.",
+  "刷新模型元数据失败: {0}": "Failed to refresh model metadata: {0}",
+  "已自动为 {0} 个供应商中的 {1} 个模型填充了上下文大小，请记得保存设置。":
+    "Automatically filled context windows for {1} models across {0} providers. Please remember to save settings.",
+  "已覆盖重置并为 {0} 个供应商中的 {1} 个模型更新了上下文大小，请记得保存设置。":
+    "Reset and updated context windows for {1} models across {0} providers. Please remember to save settings.",
+  "匹配填充失败: {0}": "Failed to match and fill: {0}",
+  "强制重新匹配失败: {0}": "Failed to overwrite match: {0}",
   "已安装版本 {0}": "Installed version: {0}",
   "安装插件 {0}": "Install plugin {0}",
   "第 {0} / {1} 页": "Page {0} / {1}",

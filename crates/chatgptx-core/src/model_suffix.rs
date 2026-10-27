@@ -780,15 +780,31 @@ struct RuntimeCatalogCacheEntry {
     models: Vec<Value>,
 }
 
+static RUNTIME_CACHE: OnceLock<Mutex<HashMap<PathBuf, RuntimeCatalogCacheEntry>>> = OnceLock::new();
+static STATIC_INDEXES: OnceLock<Mutex<HashMap<&'static str, Vec<Value>>>> = OnceLock::new();
+
+/// 清理模型元数据缓存（包含静态解析索引与运行时 models_cache.json 缓存），促使下次查询重新读取
+pub fn clear_builtin_metadata_cache() {
+    if let Some(lock) = RUNTIME_CACHE.get() {
+        if let Ok(mut cache) = lock.lock() {
+            cache.clear();
+        }
+    }
+    if let Some(lock) = STATIC_INDEXES.get() {
+        if let Ok(mut indexes) = lock.lock() {
+            indexes.clear();
+        }
+    }
+}
+
 /// 缓存运行时 models_cache.json 的解析结果；以路径和文件指纹隔离 CODEX_HOME，
 /// 文件变更后重新解析，避免索引对每个候选 slug 重复读盘和反序列化。
 fn with_runtime_models<T>(f: impl FnOnce(&[Value]) -> T) -> Option<T> {
-    static CACHE: OnceLock<Mutex<HashMap<PathBuf, RuntimeCatalogCacheEntry>>> = OnceLock::new();
     let path = crate::codex_home::default_codex_home_dir().join("models_cache.json");
     let metadata = std::fs::metadata(&path).ok()?;
     let modified = metadata.modified().ok();
     let length = metadata.len();
-    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let cache = RUNTIME_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let mut cache = cache
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -980,8 +996,7 @@ fn with_catalog_metadata_models<T>(
     catalog_json: &'static str,
     f: impl FnOnce(&[Value]) -> T,
 ) -> T {
-    static INDEXES: OnceLock<Mutex<HashMap<&'static str, Vec<Value>>>> = OnceLock::new();
-    let indexes = INDEXES.get_or_init(|| Mutex::new(HashMap::new()));
+    let indexes = STATIC_INDEXES.get_or_init(|| Mutex::new(HashMap::new()));
     let mut indexes = indexes
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());

@@ -170,6 +170,7 @@ import {
 } from "./model-windows";
 import {
   autoFillModelWindowRows,
+  autoFillAllProfilesContextWindows,
   matchContextWindowForModel,
 } from "./model-limit-presets";
 import { ContextWindowCell } from "./ContextWindowCell";
@@ -5658,6 +5659,113 @@ function SettingsScreen({
               <p className="field-hint">
                 {t("「测试供应商」按钮用这个模型发起一次真实请求，用于判断 Key 与端点是否可用。")}
               </p>
+            </CardContent>
+          </Panel>
+
+          <Panel>
+            <CardHead
+              title={t("模型上下文与元数据")}
+              detail={t("管理模型上下文大小、内置目录与官方运行时元数据缓存")}
+            />
+            <CardContent className="settings-content">
+              <div className="settings-block">
+                <div>
+                  <strong>{t("模型元数据缓存")}</strong>
+                  <p className="field-hint">
+                    {t("基于官方内置模型规则库（Claude 200k、GPT-4o 128k、o1 200k、DeepSeek 128k、Gemini 1M/2M 等）与本地 ~/.codex/models_cache.json。")}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Button
+                    variant="secondary"
+                    onClick={async () => {
+                      try {
+                        const result = await invoke<{ count: number; entries: unknown[] }>("refresh_builtin_model_metadata");
+                        actions.showMessage(
+                          result?.count
+                            ? tf("已成功刷新模型元数据，共加载 {0} 个模型条目。", [result.count])
+                            : t("已成功刷新模型元数据。")
+                        );
+                      } catch (e) {
+                        actions.showMessage(tf("刷新模型元数据失败: {0}", [String(e)]));
+                      }
+                    }}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    {t("刷新元数据缓存")}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={async () => {
+                      try {
+                        const result = await invoke<{ entries: Array<{ slug: string; context_window?: unknown }> }>("builtin_model_metadata_index");
+                        const indexMap = new Map<string, { context_window?: unknown }>();
+                        if (result?.entries) {
+                          for (const entry of result.entries) {
+                            indexMap.set(modelMetadataKey(entry.slug), entry);
+                          }
+                        }
+                        const { profiles, updatedProfilesCount, updatedModelsCount } = autoFillAllProfilesContextWindows(
+                          form.relayProfiles,
+                          indexMap,
+                          { overwrite: false },
+                        );
+                        if (updatedModelsCount > 0) {
+                          onFormChange({ ...form, relayProfiles: profiles });
+                          actions.showMessage(
+                            tf("已自动为 {0} 个供应商中的 {1} 个模型填充了上下文大小，请记得保存设置。", [
+                              updatedProfilesCount,
+                              updatedModelsCount,
+                            ])
+                          );
+                        } else {
+                          actions.showMessage(t("所有供应商的模型上下文大小已是最新或已手动指定，无需填充。"));
+                        }
+                      } catch (e) {
+                        actions.showMessage(tf("匹配填充失败: {0}", [String(e)]));
+                      }
+                    }}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {t("批量匹配填充所有供应商")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        const result = await invoke<{ entries: Array<{ slug: string; context_window?: unknown }> }>("builtin_model_metadata_index");
+                        const indexMap = new Map<string, { context_window?: unknown }>();
+                        if (result?.entries) {
+                          for (const entry of result.entries) {
+                            indexMap.set(modelMetadataKey(entry.slug), entry);
+                          }
+                        }
+                        const { profiles, updatedProfilesCount, updatedModelsCount } = autoFillAllProfilesContextWindows(
+                          form.relayProfiles,
+                          indexMap,
+                          { overwrite: true },
+                        );
+                        if (updatedModelsCount > 0) {
+                          onFormChange({ ...form, relayProfiles: profiles });
+                          actions.showMessage(
+                            tf("已覆盖重置并为 {0} 个供应商中的 {1} 个模型更新了上下文大小，请记得保存设置。", [
+                              updatedProfilesCount,
+                              updatedModelsCount,
+                            ])
+                          );
+                        } else {
+                          actions.showMessage(t("未发现需要更新的模型。"));
+                        }
+                      } catch (e) {
+                        actions.showMessage(tf("强制重新匹配失败: {0}", [String(e)]));
+                      }
+                    }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    {t("覆盖重新匹配全部上下文")}
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Panel>
 
