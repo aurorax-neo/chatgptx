@@ -35,8 +35,9 @@ export function ContextWindowCell({
     open,
     onOpenChange: setOpen,
     align: "start",
-    minWidth: 230,
-    menuWidth: 240,
+    minWidth: 172,
+    menuWidth: 180,
+    gap: 4,
   });
 
   const matchedPresetIdx = useMemo(
@@ -91,7 +92,7 @@ export function ContextWindowCell({
               <span>{t("常用预设档位")}</span>
               {recommendedWindow && (
                 <span className="text-[10px] text-brand font-medium">
-                  {t("匹配")}: {recommendedWindow}
+                  {recommendedWindow}
                 </span>
               )}
             </div>
@@ -115,6 +116,18 @@ export function ContextWindowCell({
                   </button>
                 );
               })}
+              <button
+                type="button"
+                className="context-window-chip clear-chip"
+                disabled={!value}
+                title={t("清空上下文窗口")}
+                onClick={() => {
+                  onChange("");
+                  setOpen(false);
+                }}
+              >
+                {t("清空")}
+              </button>
             </div>
             <div className="context-window-actions">
               <button
@@ -123,7 +136,7 @@ export function ContextWindowCell({
                 disabled={!recommendedWindow}
                 title={
                   recommendedWindow
-                    ? `${t("填入匹配值")}: ${recommendedWindow}`
+                    ? `${t("填入匹配推荐")}: ${recommendedWindow}`
                     : t("未在目录中匹配到该模型")
                 }
                 onClick={() => {
@@ -133,23 +146,9 @@ export function ContextWindowCell({
                   }
                 }}
               >
-                <Sparkles className="h-3.5 w-3.5" />
-                {recommendedWindow ? `${t("匹配填充")}: ${recommendedWindow}` : t("无匹配项")}
+                <Sparkles className="h-3 w-3 shrink-0" />
+                <span>{recommendedWindow ? `${t("匹配推荐")}: ${recommendedWindow}` : t("无匹配推荐")}</span>
               </button>
-              {value && (
-                <button
-                  type="button"
-                  className="context-window-action-btn"
-                  title={t("清空上下文窗口")}
-                  onClick={() => {
-                    onChange("");
-                    setOpen(false);
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                  {t("清空")}
-                </button>
-              )}
             </div>
           </div>,
           document.body,

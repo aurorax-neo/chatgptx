@@ -10557,12 +10557,14 @@ select {
   color: hsl(var(--popover-foreground));
   border: 1px solid hsl(var(--border));
   border-radius: 8px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.25);
-  padding: 8px;
-  min-width: 230px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  padding: 6px 7px;
+  min-width: 172px;
+  max-width: 184px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
+  backdrop-filter: blur(8px);
 }
 
 .context-window-popover-header {
@@ -10573,34 +10575,47 @@ select {
   font-weight: 600;
   color: hsl(var(--muted-foreground));
   padding-inline: 2px;
+  white-space: nowrap;
 }
 
 .context-window-ladder {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
+  gap: 3px;
 }
 
 .context-window-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 24px;
-  padding: 0 6px;
-  border-radius: 5px;
-  border: 1px solid hsl(var(--border));
-  background: hsl(var(--muted) / 0.4);
+  height: 22px;
+  padding: 0 2px;
+  border-radius: 4px;
+  border: 1px solid hsl(var(--border) / 0.8);
+  background: hsl(var(--muted) / 0.35);
   color: hsl(var(--foreground));
-  font-size: 11px;
+  font-size: 10.5px;
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  white-space: nowrap;
+  transition: all 0.12s;
 }
 
-.context-window-chip:hover {
+.context-window-chip:hover:not(:disabled) {
   background: hsl(var(--accent));
   border-color: hsl(var(--accent-foreground) / 0.2);
+}
+
+.context-window-chip:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.context-window-chip.clear-chip {
+  font-family: inherit;
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
 }
 
 .context-window-chip[data-selected="true"] {
@@ -10613,27 +10628,30 @@ select {
 .context-window-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   border-top: 1px solid hsl(var(--border) / 0.6);
-  padding-top: 6px;
+  padding-top: 5px;
 }
 
 .context-window-action-btn {
-  flex: 1;
+  width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  height: 26px;
-  padding: 0 8px;
-  border-radius: 5px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 4px;
   border: 1px solid hsl(var(--border));
   background: hsl(var(--muted) / 0.3);
   color: hsl(var(--foreground));
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.12s;
 }
 
 .context-window-action-btn:hover:not(:disabled) {

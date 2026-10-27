@@ -974,8 +974,8 @@ const routes: Array<{ id: Route; label: string; icon: LucideIcon; badge?: string
   { id: "sessions", label: t("会话管理"), icon: MessageCircle, tool: "codex" },
   { id: "context", label: "MCP", icon: Network, tool: "codex" },
   { id: "skills", label: "Skills", icon: BookOpen, tool: "codex" },
-  { id: "enhance", label: t("Codex增强"), icon: Hammer, tool: "codex" },
   { id: "userScripts", label: t("拓展"), icon: FileCode2, tool: "codex" },
+  { id: "enhance", label: t("Codex增强"), icon: Hammer, tool: "codex" },
   { id: "pluginMarket", label: t("Codex 插件市场"), icon: Store, tool: "codex" },
   { id: "agentCache", label: t("AI Agent 缓存清理"), icon: Trash2 },
   { id: "maintenance", label: t("安装维护"), icon: Wrench, tool: "codex" },
@@ -995,7 +995,7 @@ const navigationSections: Array<{ label: string; routes: Route[]; placement?: "b
   },
   {
     label: t("扩展"),
-    routes: ["enhance", "userScripts", "pluginMarket"],
+    routes: ["userScripts", "enhance", "pluginMarket"],
   },
   {
     label: t("系统"),
