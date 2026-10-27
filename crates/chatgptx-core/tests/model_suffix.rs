@@ -951,3 +951,41 @@ fn builtin_metadata_matches_path_prefix_and_release_suffixes() {
     let ds_chat = builtin_model_metadata("deepseek-chat").expect("deepseek-chat 别名命中");
     assert_eq!(ds_chat.entry["context_window"], 1_048_576);
 }
+
+/// 校验生成的 model_catalog_json 中每一个 model 条目都严格包含 supported_reasoning_levels、default_reasoning_level 和 shell_type
+#[test]
+fn generated_catalog_models_always_contain_required_fields() {
+    let entries = collect_catalog_entries(
+        "custom-unknown-model\nopenai/gpt-4o\nclaude-3-5-sonnet\ngrok-2",
+        &HashMap::new(),
+        &HashMap::new(),
+        "custom-unknown-model",
+    );
+    let catalog_str = build_model_catalog_json(&entries, Some(128_000));
+    let catalog: serde_json::Value = serde_json::from_str(&catalog_str).unwrap();
+    let models = catalog["models"].as_array().expect("models 数组");
+    assert_eq!(models.len(), 4);
+
+    for model in models {
+        assert!(
+            model.get("supported_reasoning_levels").is_some(),
+            "模型 {} 缺失 supported_reasoning_levels 字段",
+            model["slug"]
+        );
+        assert!(
+            model["supported_reasoning_levels"].is_array(),
+            "模型 {} 的 supported_reasoning_levels 必须是数组",
+            model["slug"]
+        );
+        assert!(
+            model.get("default_reasoning_level").is_some(),
+            "模型 {} 缺失 default_reasoning_level 字段",
+            model["slug"]
+        );
+        assert!(
+            model.get("shell_type").is_some(),
+            "模型 {} 缺失 shell_type 字段",
+            model["slug"]
+        );
+    }
+}

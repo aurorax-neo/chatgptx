@@ -548,18 +548,27 @@ fn resolve_builtin_metadata(slug: &str) -> Option<ResolvedBuiltinMetadata> {
             entry,
         });
     }
-    if let Some(entry) = crate::remote_model_catalog::query_models_dev_catalog(&slug) {
+    if let Some(entry) = bundled_template_entry(&slug) {
         return Some(ResolvedBuiltinMetadata {
             slug,
-            source: "models.dev",
+            source: "官方内置",
             entry,
         });
     }
-    bundled_template_entry(&slug).map(|entry| ResolvedBuiltinMetadata {
-        slug,
-        source: "官方内置",
-        entry,
-    })
+    if let Some(entry) = crate::remote_model_catalog::query_models_dev_catalog(&slug) {
+        let mut base = first_bundled_template_entry().unwrap_or_else(|| json!({}));
+        if let (Some(target), Some(source)) = (base.as_object_mut(), entry.as_object()) {
+            for (key, value) in source {
+                target.insert(key.clone(), value.clone());
+            }
+        }
+        return Some(ResolvedBuiltinMetadata {
+            slug,
+            source: "models.dev",
+            entry: base,
+        });
+    }
+    None
 }
 
 /// 按模型名查内置元数据（剥合法 suffix、大小写不敏感）。
@@ -598,10 +607,6 @@ pub fn builtin_model_metadata_index() -> Vec<Value> {
     }
     if let Some(models) = runtime_models_catalog() {
         collect_candidates(&models, &mut candidate_seen, &mut candidate_slugs);
-    }
-    let remote_models = crate::remote_model_catalog::all_cached_models_dev_models();
-    if !remote_models.is_empty() {
-        collect_candidates(&remote_models, &mut candidate_seen, &mut candidate_slugs);
     }
     collect_candidates(bundled_catalog_models(), &mut candidate_seen, &mut candidate_slugs);
 
@@ -748,6 +753,18 @@ pub(crate) fn build_model_catalog_json_with_capabilities(
                     .cloned()
                     .unwrap_or_else(|| json!(""));
                 model["base_instructions"] = mirrored;
+            }
+            // 确保 supported_reasoning_levels 必须存在且为数组，防止 Codex 拒载反序列化
+            if model.get("supported_reasoning_levels").is_none_or(Value::is_null)
+                || !model["supported_reasoning_levels"].is_array()
+            {
+                model["supported_reasoning_levels"] = json!([]);
+            }
+            if model.get("default_reasoning_level").is_none_or(Value::is_null) {
+                model["default_reasoning_level"] = json!("medium");
+            }
+            if model.get("shell_type").is_none_or(Value::is_null) {
+                model["shell_type"] = json!("unified_exec");
             }
             model["availability_nux"] = Value::Null;
             model["upgrade"] = Value::Null;

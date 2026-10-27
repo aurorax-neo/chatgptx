@@ -93,6 +93,16 @@ pub fn parse_models_dev_json(root: &Value) -> (Vec<Value>, HashMap<String, Value
             let context_window = limit.and_then(|l| l.get("context")).and_then(Value::as_u64).unwrap_or(128_000);
             let max_output = limit.and_then(|l| l.get("output")).and_then(Value::as_u64).unwrap_or(8_192);
             let reasoning = m_obj.get("reasoning").and_then(Value::as_bool).unwrap_or(false);
+            let reasoning_levels = if reasoning {
+                json!([
+                    { "effort": "low", "description": "Fast responses with lighter reasoning" },
+                    { "effort": "medium", "description": "Balances speed and reasoning depth for everyday tasks" },
+                    { "effort": "high", "description": "Greater reasoning depth for complex problems" },
+                    { "effort": "xhigh", "description": "Extra high reasoning depth for complex problems" }
+                ])
+            } else {
+                json!([])
+            };
 
             let entry = json!({
                 "slug": id,
@@ -104,6 +114,9 @@ pub fn parse_models_dev_json(root: &Value) -> (Vec<Value>, HashMap<String, Value
                 "provider": provider_key,
                 "provider_name": provider_name,
                 "supports_reasoning": reasoning,
+                "supported_reasoning_levels": reasoning_levels,
+                "default_reasoning_level": "medium",
+                "shell_type": "unified_exec",
                 "source": "models.dev"
             });
 
