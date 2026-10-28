@@ -386,11 +386,17 @@ pub fn model_ui_metadata_with_override(slug: &str, user_override: Option<&Value>
             }))
         })
         .collect::<Vec<_>>();
+    let explicit_display_name = user_override
+        .and_then(|user| {
+            user.get("display_name")
+                .or_else(|| user.get("displayName"))
+        })
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    let display_name = explicit_display_name.unwrap_or(normalized_slug.as_str());
     let mut ui = json!({
-        "displayName": metadata
-            .get("display_name")
-            .and_then(Value::as_str)
-            .unwrap_or(normalized_slug.as_str()),
+        "displayName": display_name,
         "description": metadata
             .get("description")
             .and_then(Value::as_str)
@@ -430,8 +436,10 @@ pub fn model_ui_metadata_with_override(slug: &str, user_override: Option<&Value>
     }
     if !has_builtin {
         // 单独声明 Fast 不能替原生描述符制造名称、描述或推理默认档。
+        if explicit_display_name.is_none() {
+            ui.as_object_mut().unwrap().remove("displayName");
+        }
         for (ui_field, source_field) in [
-            ("displayName", "display_name"),
             ("description", "description"),
             ("defaultReasoningEffort", "default_reasoning_level"),
         ] {

@@ -335,7 +335,7 @@ fn astra_metadata_exposes_max_ultra_in_catalog_and_ui() {
         assert_eq!(efforts, expected);
     }
     assert_eq!(model["display_name"], "gpt-6-astra");
-    assert_eq!(metadata["displayName"], "GPT-6-Astra");
+    assert_eq!(metadata["displayName"], "gpt-6-astra");
     assert_eq!(model["default_reasoning_level"], "medium");
     assert_eq!(metadata["defaultReasoningEffort"], "medium");
     assert_eq!(model["context_window"], 272_000);
@@ -398,7 +398,7 @@ fn gpt61_sol_metadata_exposes_max_ultra_fast_and_272k_default() {
     }
     assert_eq!(model["slug"], "gpt-6.1-sol");
     assert_eq!(model["display_name"], "gpt-6.1-sol");
-    assert_eq!(ui["displayName"], "GPT-6.1-Sol");
+    assert_eq!(ui["displayName"], "gpt-6.1-sol");
     assert_eq!(ui["description"], model["description"]);
     assert_eq!(model["default_reasoning_level"], "medium");
     assert_eq!(ui["defaultReasoningEffort"], "medium");
@@ -560,7 +560,7 @@ fn catalog_metadata_matches_slug_case_insensitively() {
     assert!(requires_bundled_metadata_catalog("GPT-6-Astra"));
     assert!(!requires_bundled_metadata_catalog("gpt-6-astra-custom"));
     let metadata = model_ui_metadata("GPT-5.6-SOL").expect("Sol metadata should exist");
-    assert_eq!(metadata["displayName"], "GPT-5.6-Sol");
+    assert_eq!(metadata["displayName"], "GPT-5.6-SOL");
 }
 
 #[test]
@@ -649,6 +649,18 @@ fn vendor_metadata_chain_matches_case_insensitively() {
     assert_eq!(catalog["models"][0]["slug"], "GLM-5.3");
     assert_eq!(catalog["models"][0]["display_name"], "GLM-5.3");
     assert_eq!(catalog["models"][0]["context_window"], 1_048_576);
+}
+
+#[test]
+fn model_ui_metadata_keeps_exact_slug_and_does_not_use_models_dev_friendly_name() {
+    let terra = model_ui_metadata("ycj-001/gpt-6.1-terra").unwrap();
+    assert_eq!(terra["displayName"], "ycj-001/gpt-6.1-terra");
+
+    let gemini = model_ui_metadata("ycj-xb/gemini-4-argon").unwrap();
+    assert_eq!(gemini["displayName"], "ycj-xb/gemini-4-argon");
+
+    let grok = model_ui_metadata("ycj-xb/grok-4.7").unwrap();
+    assert_eq!(grok["displayName"], "ycj-xb/grok-4.7");
 }
 
 #[test]
@@ -907,7 +919,7 @@ fn gpt6_sol_luna_metadata_matches_official_efforts_fast_and_default_window() {
             assert_eq!(efforts, expected_efforts);
         }
         assert_eq!(model["display_name"], slug);
-        assert!(ui["displayName"].as_str().is_some());
+        assert_eq!(ui["displayName"], slug);
         assert_eq!(model["default_reasoning_level"], "medium");
         assert_eq!(ui["defaultReasoningEffort"], "medium");
         assert_eq!(model["context_window"], 272_000);

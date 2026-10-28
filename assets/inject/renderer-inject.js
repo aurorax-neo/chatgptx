@@ -10292,7 +10292,14 @@
     const metadata = chatgptxModelMetadata(modelName);
     if (!descriptor || !metadata) return false;
     let changed = false;
-    for (const key of ["displayName", "description", "defaultReasoningEffort"]) {
+    const targetDisplayName = typeof metadata.displayName === "string" && metadata.displayName.trim()
+      ? metadata.displayName.trim()
+      : null;
+    if (targetDisplayName && descriptor.displayName !== targetDisplayName) {
+      descriptor.displayName = targetDisplayName;
+      changed = true;
+    }
+    for (const key of ["description", "defaultReasoningEffort"]) {
       if (typeof metadata[key] === "string" && metadata[key] && descriptor[key] !== metadata[key]) {
         descriptor[key] = metadata[key];
         changed = true;
@@ -10310,12 +10317,15 @@
 
   function chatgptxModelDescriptor(modelName) {
     const metadata = chatgptxModelMetadata(modelName);
+    const displayName = typeof metadata?.displayName === "string" && metadata.displayName.trim()
+      ? metadata.displayName.trim()
+      : modelName;
     return {
       model: modelName,
       id: modelName,
       slug: modelName,
       name: modelName,
-      displayName: metadata?.displayName || modelName,
+      displayName,
       description: metadata?.description || codexModelCatalog.provider_name || codexModelCatalog.model_provider || "Custom model",
       hidden: false,
       isDefault: false,
