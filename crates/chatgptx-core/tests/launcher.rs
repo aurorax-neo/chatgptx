@@ -737,10 +737,14 @@ fn launcher_ignores_retired_fast_startup_and_preserves_manual_extra_arguments() 
     ] {
         let settings: BackendSettings = serde_json::from_value(serde_json::json!({
             "codexAppFastStartup": old_value,
+            "codexExtraArgs": ["--no-proxy-server"],
         }))
         .unwrap();
         let args = build_codex_arguments_for_settings(9229, &settings);
-        assert_eq!(args, build_codex_arguments(9229, &[]));
+        assert_eq!(
+            args,
+            build_codex_arguments(9229, &["--no-proxy-server".to_string()])
+        );
         assert!(
             serde_json::to_value(&settings)
                 .unwrap()
@@ -752,12 +756,15 @@ fn launcher_ignores_retired_fast_startup_and_preserves_manual_extra_arguments() 
     let manual_argument = "--host-resolver-rules=MAP example.test 127.0.0.1";
     let settings: BackendSettings = serde_json::from_value(serde_json::json!({
         "codexAppFastStartup": true,
-        "codexExtraArgs": [manual_argument],
+        "codexExtraArgs": [manual_argument, "--no-proxy-server"],
     }))
     .unwrap();
     assert_eq!(
         build_codex_arguments_for_settings(9229, &settings),
-        build_codex_arguments(9229, &[manual_argument.to_string()])
+        build_codex_arguments(
+            9229,
+            &[manual_argument.to_string(), "--no-proxy-server".to_string()],
+        )
     );
 }
 

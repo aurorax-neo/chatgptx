@@ -1155,6 +1155,42 @@ fn codex_delete_rolls_back_when_related_delete_fails() {
 }
 
 #[test]
+fn delete_local_from_paths_reports_partial_when_one_copy_remains() {
+    let tmp = tempdir().unwrap();
+    let first_db = tmp.path().join("first.sqlite");
+    let second_db = tmp.path().join("second.sqlite");
+    let first_rollout = tmp.path().join("first.jsonl");
+    let second_rollout = tmp.path().join("second.jsonl");
+    fs::write(&first_rollout, "{\"type\":\"message\"}\n").unwrap();
+    fs::write(&second_rollout, "{\"type\":\"message\"}\n").unwrap();
+    create_codex_thread_db(&first_db, &first_rollout);
+    create_codex_thread_db(&second_db, &second_rollout);
+    Connection::open(&second_db)
+        .unwrap()
+        .execute(
+            "CREATE TRIGGER fail_threads_delete BEFORE DELETE ON threads \
+             BEGIN SELECT RAISE(ABORT, 'locked-copy'); END",
+            [],
+        )
+        .unwrap();
+
+    let deleted = delete_local_from_paths(
+        vec![first_db.clone(), second_db.clone()],
+        BackupStore::new(tmp.path().join("backups")),
+        &session("t1", "Codex Thread"),
+        None,
+    );
+
+    assert_eq!(deleted.status, DeleteStatus::Partial);
+    assert!(deleted.undo_token.is_some());
+    assert!(deleted.message.contains("有 1 个存储删除失败"));
+    assert_eq!(thread_count(&first_db, "t1"), 0);
+    assert_eq!(thread_count(&second_db, "t1"), 1);
+    assert!(!first_rollout.exists());
+    assert!(second_rollout.exists());
+}
+
+#[test]
 fn missing_db_and_unsupported_schema_return_failed_results() {
     let tmp = tempdir().unwrap();
     let missing = tmp.path().join("missing.sqlite");

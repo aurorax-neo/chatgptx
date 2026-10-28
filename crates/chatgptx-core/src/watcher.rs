@@ -11,7 +11,7 @@ pub use crate::windows_integration::WindowsProcessInfo;
 pub const WATCHER_INTERVAL_SECONDS: f64 = 3.0;
 pub const CDP_PROBE_TIMEOUT_SECONDS: f64 = 0.5;
 pub const TAKEOVER_FAILURE_BACKOFF_SECONDS: f64 = 30.0;
-pub const RESTART_STOP_WAIT_TIMEOUT_MS: u64 = 5_000;
+pub const RESTART_STOP_WAIT_TIMEOUT_MS: u64 = 10_000;
 const RESTART_STOP_WAIT_INTERVAL_MS: u64 = 100;
 /// 「等旧启动器退出」轮询退避的上限。
 const LAUNCHER_WAIT_BACKOFF_MAX_MS: u64 = 1_000;
@@ -1807,24 +1807,57 @@ fn terminate_macos_processes_and_wait<F>(
     if process_ids.is_empty() {
         return;
     }
+    let process_incarnations = process_ids
+        .iter()
+        .filter_map(|process_id| {
+            macos_process_incarnation(*process_id)
+                .map(|incarnation| (*process_id, incarnation))
+        })
+        .collect::<HashMap<_, _>>();
     for process_id in &process_ids {
         let _ = terminate_macos_process(*process_id);
     }
     let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);
     loop {
         let remaining = process_ids_still_running(&process_ids, find_processes());
-        if remaining.is_empty() || std::time::Instant::now() >= deadline {
-            if !remaining.is_empty() {
-                let _ = crate::diagnostic_log::append_diagnostic_log(
-                    "watcher.stop_wait_timeout",
-                    serde_json::json!({
-                        "remaining_process_ids": remaining,
-                        "timeout_ms": timeout_ms,
-                        "platform": "macos"
-                    }),
-                );
+        if remaining.is_empty() {
+            return;
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = crate::diagnostic_log::append_diagnostic_log(
+                "watcher.stop_wait_timeout",
+                serde_json::json!({
+                    "remaining_process_ids": remaining,
+                    "timeout_ms": timeout_ms,
+                    "platform": "macos",
+                    "escalation": "sigkill"
+                }),
+            );
+            for process_id in &remaining {
+                let expected = process_incarnations.get(process_id);
+                let current = macos_process_incarnation(*process_id);
+                if expected.is_some() && current.as_ref() == expected {
+                    let _ = terminate_macos_process_forcefully(*process_id);
+                } else {
+                    let _ = crate::diagnostic_log::append_diagnostic_log(
+                        "watcher.stop_force_kill_skipped",
+                        serde_json::json!({
+                            "process_id": process_id,
+                            "reason": "process incarnation changed or unavailable",
+                            "expected_incarnation": expected,
+                            "current_incarnation": current
+                        }),
+                    );
+                }
             }
-            break;
+            let force_deadline =
+                std::time::Instant::now() + Duration::from_millis(LAUNCHER_FORCE_KILL_GRACE_MS);
+            while !process_ids_still_running(&remaining, find_processes()).is_empty()
+                && std::time::Instant::now() < force_deadline
+            {
+                std::thread::sleep(Duration::from_millis(interval_ms));
+            }
+            return;
         }
         std::thread::sleep(Duration::from_millis(interval_ms));
     }
@@ -1834,6 +1867,29 @@ fn terminate_macos_processes_and_wait<F>(
 fn terminate_macos_process(process_id: u32) -> std::io::Result<()> {
     Command::new("kill")
         .arg(process_id.to_string())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_process_incarnation(process_id: u32) -> Option<String> {
+    let output = Command::new("ps")
+        .args(["-o", "lstart=", "-p", &process_id.to_string()])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let incarnation = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!incarnation.is_empty()).then_some(incarnation)
+}
+
+#[cfg(target_os = "macos")]
+fn terminate_macos_process_forcefully(process_id: u32) -> std::io::Result<()> {
+    Command::new("kill")
+        .args(["-KILL", &process_id.to_string()])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()

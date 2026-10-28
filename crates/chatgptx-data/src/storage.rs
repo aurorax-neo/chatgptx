@@ -22,12 +22,14 @@ pub fn delete_local_from_paths(
     );
     let mut deleted_count = 0usize;
     let mut backup_tokens = Vec::new();
+    let mut deletion_errors = Vec::new();
     for db_path in db_paths {
         let adapter = match codex_home {
             Some(home) => SQLiteStorageAdapter::new(db_path, backup_store.clone())
                 .with_codex_home(home),
             None => SQLiteStorageAdapter::new(db_path, backup_store.clone()),
         };
+        let db_path = adapter.db_path.clone();
         let candidate_result = adapter.delete_local(session);
         if matches!(candidate_result.status, DeleteStatus::LocalDeleted) {
             deleted_count += 1;
@@ -35,7 +37,16 @@ pub fn delete_local_from_paths(
                 backup_tokens.push(token.clone());
             }
             result = candidate_result;
-        } else if deleted_count == 0 {
+        } else if !is_benign_local_delete_miss(&candidate_result) {
+            deletion_errors.push(format!(
+                "{}：{}",
+                db_path.to_string_lossy(),
+                candidate_result.message
+            ));
+            if deleted_count == 0 {
+                result = candidate_result;
+            }
+        } else if deleted_count == 0 && deletion_errors.is_empty() {
             result = candidate_result;
         }
     }
@@ -43,6 +54,16 @@ pub fn delete_local_from_paths(
         result.message = format!("已从 {deleted_count} 个本地存储删除");
         result.undo_token = Some(json!(backup_tokens).to_string());
         result.backup_path = None;
+    } else if deleted_count == 1 {
+        result.undo_token = backup_tokens.first().cloned();
+    }
+    if deleted_count > 0 && !deletion_errors.is_empty() {
+        result.status = DeleteStatus::Partial;
+        result.message = format!(
+            "已从 {deleted_count} 个本地存储删除，但有 {} 个存储删除失败：{}",
+            deletion_errors.len(),
+            deletion_errors.join("；")
+        );
     }
     // 纯 API 模式（model_provider = "custom"）下 threads 表是空的，上面每个库都查不到
     // 记录，于是直接返回「Thread not found in local storage」而会话行仍留在列表里
@@ -51,6 +72,7 @@ pub fn delete_local_from_paths(
     // 数据库里没有不代表索引里没有，这里退一步清索引：真清掉了就算删除成功，
     // 索引里也没有才是真的找不到。
     if deleted_count == 0
+        && deletion_errors.is_empty()
         && matches!(result.status, DeleteStatus::Failed)
         && let Some(home) = codex_home
     {
@@ -82,6 +104,16 @@ pub fn delete_local_from_paths(
         }
     }
     result
+}
+
+fn is_benign_local_delete_miss(result: &DeleteResult) -> bool {
+    if result.status != DeleteStatus::Failed {
+        return false;
+    }
+    let message = result.message.to_ascii_lowercase();
+    message.contains("thread not found")
+        || message.contains("database not found")
+        || message.contains("unsupported local storage schema")
 }
 
 #[derive(Debug, Clone)]
@@ -218,6 +250,7 @@ impl SQLiteStorageAdapter {
         }
         let result = (|| -> anyhow::Result<DeleteResult> {
             let mut db = Connection::open(&self.db_path)?;
+            db.busy_timeout(std::time::Duration::from_secs(5))?;
             match schema_kind(&db)? {
                 Some(SchemaKind::GenericSessions) => self.delete_generic_session(&mut db, session),
                 Some(SchemaKind::CodexThreads) => self.delete_codex_thread(&mut db, session),

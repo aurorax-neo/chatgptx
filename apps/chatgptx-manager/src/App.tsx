@@ -5748,10 +5748,14 @@ function SettingsScreen({
                         }>("get_models_dev_catalog_status");
                         if (status) setRemoteCatalogStatus(status);
                         actions.showMessage(
+                          t("models.dev 全网模型元数据与上下文"),
                           result?.message || t("已成功联网拉取并更新 models.dev 元数据！")
                         );
                       } catch (e) {
-                        actions.showMessage(tf("联网同步 models.dev 失败: {0}", [String(e)]));
+                        actions.showMessage(
+                          t("models.dev 全网模型元数据与上下文"),
+                          tf("联网同步 models.dev 失败: {0}", [String(e)]),
+                        );
                       } finally {
                         setFetchingRemoteCatalog(false);
                       }
@@ -5772,12 +5776,16 @@ function SettingsScreen({
                       try {
                         const result = await invoke<{ count: number; entries: unknown[] }>("refresh_builtin_model_metadata");
                         actions.showMessage(
+                          t("models.dev 全网模型元数据与上下文"),
                           result?.count
                             ? tf("已成功刷新模型元数据，共加载 {0} 个模型条目。", [result.count])
                             : t("已成功刷新模型元数据。")
                         );
                       } catch (e) {
-                        actions.showMessage(tf("刷新模型元数据失败: {0}", [String(e)]));
+                        actions.showMessage(
+                          t("models.dev 全网模型元数据与上下文"),
+                          tf("刷新模型元数据失败: {0}", [String(e)]),
+                        );
                       }
                     }}
                   >
@@ -5803,16 +5811,23 @@ function SettingsScreen({
                         if (updatedModelsCount > 0) {
                           onFormChange({ ...form, relayProfiles: profiles });
                           actions.showMessage(
+                            t("models.dev 全网模型元数据与上下文"),
                             tf("已自动为 {0} 个供应商中的 {1} 个模型填充了上下文大小，请记得保存设置。", [
                               updatedProfilesCount,
                               updatedModelsCount,
                             ])
                           );
                         } else {
-                          actions.showMessage(t("所有供应商的模型上下文大小已是最新或已手动指定，无需填充。"));
+                          actions.showMessage(
+                            t("models.dev 全网模型元数据与上下文"),
+                            t("所有供应商的模型上下文大小已是最新或已手动指定，无需填充。"),
+                          );
                         }
                       } catch (e) {
-                        actions.showMessage(tf("匹配填充失败: {0}", [String(e)]));
+                        actions.showMessage(
+                          t("models.dev 全网模型元数据与上下文"),
+                          tf("匹配填充失败: {0}", [String(e)]),
+                        );
                       }
                     }}
                     type="button"
@@ -5839,16 +5854,23 @@ function SettingsScreen({
                         if (updatedModelsCount > 0) {
                           onFormChange({ ...form, relayProfiles: profiles });
                           actions.showMessage(
+                            t("models.dev 全网模型元数据与上下文"),
                             tf("已覆盖重置并为 {0} 个供应商中的 {1} 个模型更新了上下文大小，请记得保存设置。", [
                               updatedProfilesCount,
                               updatedModelsCount,
                             ])
                           );
                         } else {
-                          actions.showMessage(t("未发现需要更新的模型。"));
+                          actions.showMessage(
+                            t("models.dev 全网模型元数据与上下文"),
+                            t("未发现需要更新的模型。"),
+                          );
                         }
                       } catch (e) {
-                        actions.showMessage(tf("强制重新匹配失败: {0}", [String(e)]));
+                        actions.showMessage(
+                          t("models.dev 全网模型元数据与上下文"),
+                          tf("强制重新匹配失败: {0}", [String(e)]),
+                        );
                       }
                     }}
                     type="button"
@@ -5862,12 +5884,16 @@ function SettingsScreen({
                       try {
                         const result = await invoke<{ count: number; entries: unknown[] }>("refresh_builtin_model_metadata");
                         actions.showMessage(
+                          t("models.dev 全网模型元数据与上下文"),
                           result?.count
                             ? tf("已成功刷新模型元数据，共加载 {0} 个模型条目。", [result.count])
                             : t("已成功刷新模型元数据。")
                         );
                       } catch (e) {
-                        actions.showMessage(tf("刷新模型元数据失败: {0}", [String(e)]));
+                        actions.showMessage(
+                          t("models.dev 全网模型元数据与上下文"),
+                          tf("刷新模型元数据失败: {0}", [String(e)]),
+                        );
                       }
                     }}
                     type="button"

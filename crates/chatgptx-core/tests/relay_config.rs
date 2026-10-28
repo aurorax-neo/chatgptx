@@ -5243,7 +5243,7 @@ base_url = "https://relay.example/v1"
     };
     let model = read_model();
     assert_eq!(model["slug"], "gpt-6.1-sol");
-    assert_eq!(model["display_name"], "GPT-6.1-Sol");
+    assert_eq!(model["display_name"], "gpt-6.1-sol");
     assert_eq!(model["default_reasoning_level"], "medium");
     assert_eq!(model["context_window"], 272_000);
     assert_eq!(model["max_context_window"], 872_000);

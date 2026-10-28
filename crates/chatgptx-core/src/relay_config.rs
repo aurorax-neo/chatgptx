@@ -2847,6 +2847,78 @@ pub fn cleanup_unsupported_approval_policies_in_home(home: &Path) -> anyhow::Res
     Ok(true)
 }
 
+/// 旧版本生成的 catalog 可能把模型 ID 写成了友好展示名。启动前把托管 catalog
+/// 的展示名恢复为原始模型 ID，避免用户升级后仍看到短名。
+pub fn normalize_managed_catalog_display_names(home: &Path) -> anyhow::Result<usize> {
+    let config_path = home.join("config.toml");
+    let config = match std::fs::read_to_string(&config_path) {
+        Ok(config) => config,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error.into()),
+    };
+    let Some(relative) = root_key_string(&config, "model_catalog_json") else {
+        return Ok(0);
+    };
+    let relative_path = Path::new(relative.trim());
+    if relative_path.is_absolute()
+        || !relative_path.starts_with("model-catalogs")
+        || relative_path
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Ok(0);
+    }
+    let catalog_path = home.join(relative_path);
+    let original = match std::fs::read_to_string(&catalog_path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error.into()),
+    };
+    let mut catalog: Value = serde_json::from_str(&original)
+        .with_context(|| format!("{} 不是有效 JSON", catalog_path.display()))?;
+    let mut changed = 0usize;
+    if let Some(models) = catalog.get_mut("models").and_then(Value::as_array_mut) {
+        for model in models {
+            let Some(slug) = model.get("slug").and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(display_name) = model.get("display_name").and_then(Value::as_str) else {
+                continue;
+            };
+            if display_name == slug
+                || !catalog_display_name_was_generated(slug, display_name)
+            {
+                continue;
+            }
+            model["display_name"] = json!(slug);
+            changed += 1;
+        }
+    }
+    if changed > 0 {
+        let mut normalized = serde_json::to_string_pretty(&catalog)?;
+        normalized.push('\n');
+        crate::settings::atomic_write(&catalog_path, normalized.as_bytes())?;
+    }
+    Ok(changed)
+}
+
+fn catalog_display_name_was_generated(slug: &str, display_name: &str) -> bool {
+    let Some(metadata) = crate::model_suffix::builtin_model_metadata(slug) else {
+        return false;
+    };
+    let Some(catalog_name) = metadata
+        .entry
+        .get("display_name")
+        .and_then(Value::as_str)
+    else {
+        return false;
+    };
+    display_name == catalog_name
+        || display_name
+            .strip_prefix(catalog_name)
+            .is_some_and(|suffix| suffix.starts_with('（'))
+}
+
 fn validate_auth_json(auth_bytes: &[u8], path: &Path) -> anyhow::Result<()> {
     if auth_bytes.iter().all(|byte| byte.is_ascii_whitespace()) {
         return Ok(());
@@ -5177,6 +5249,46 @@ fn account_label_from_jwt(token: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_catalog_normalization_restores_fetched_model_ids() {
+        let temp = tempfile::tempdir().unwrap();
+        let catalog_dir = temp.path().join("model-catalogs");
+        std::fs::create_dir_all(&catalog_dir).unwrap();
+        std::fs::write(
+            temp.path().join("config.toml"),
+            "model_catalog_json = \"model-catalogs/default.json\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            catalog_dir.join("default.json"),
+            serde_json::to_string_pretty(&json!({
+                "models": [
+                    {"slug": "vendor/kimi-k3", "display_name": "Kimi K3（Relay）"},
+                    {"slug": "gpt-5.5", "display_name": "GPT-5.5"},
+                    {"slug": "kimi-k3", "display_name": "我的 Kimi"}
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            normalize_managed_catalog_display_names(temp.path()).unwrap(),
+            2
+        );
+        let catalog: Value = serde_json::from_str(
+            &std::fs::read_to_string(catalog_dir.join("default.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(catalog["models"][0]["display_name"], "vendor/kimi-k3");
+        assert_eq!(catalog["models"][1]["display_name"], "gpt-5.5");
+        assert_eq!(catalog["models"][2]["display_name"], "我的 Kimi");
+        assert_eq!(
+            normalize_managed_catalog_display_names(temp.path()).unwrap(),
+            0
+        );
+    }
 
     /// 回归 09-23 现场故障：裸的 [mcp_servers] 父表头把切块锚点钉在 mcp_servers，
     /// 之后两个重复的 [mcp_servers.node_repl] 落在同一块里，整块解析失败后退回

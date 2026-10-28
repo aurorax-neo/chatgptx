@@ -194,6 +194,20 @@ test("non-current deletion refreshes the list without changing the selected thre
   assert.equal(f.timers.length, 0);
 });
 
+test("partial local deletion keeps the row and reports the failed copy", async () => {
+  const f = deleteFixture();
+  await f.begin();
+  await f.finish({
+    status: "partial",
+    session_id: uuid,
+    message: "已从 1 个本地存储删除，但有 1 个存储删除失败",
+  });
+  assert.equal(f.rows[0].removed, false);
+  assert.equal(f.native.clicks, 0);
+  assert.equal(f.refreshes.length, 0);
+  assert.match(f.toasts[0], /存储删除失败/);
+});
+
 test("unknown hosts retain the safe refusal and emit metadata-only evidence", async () => {
   const f = deleteFixture(); f.rows[0].attributes.delete("data-app-action-sidebar-thread-host-id"); await f.begin();
   assert.equal(f.requests.length, 0); assert.equal(f.confirmations.length, 0);

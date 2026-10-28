@@ -334,8 +334,8 @@ fn astra_metadata_exposes_max_ultra_in_catalog_and_ui() {
             .collect();
         assert_eq!(efforts, expected);
     }
-    assert_eq!(model["display_name"], "GPT-6-Astra");
-    assert_eq!(metadata["displayName"], model["display_name"]);
+    assert_eq!(model["display_name"], "gpt-6-astra");
+    assert_eq!(metadata["displayName"], "GPT-6-Astra");
     assert_eq!(model["default_reasoning_level"], "medium");
     assert_eq!(metadata["defaultReasoningEffort"], "medium");
     assert_eq!(model["context_window"], 272_000);
@@ -397,8 +397,8 @@ fn gpt61_sol_metadata_exposes_max_ultra_fast_and_272k_default() {
         assert_eq!(efforts, ["low", "medium", "high", "xhigh", "max", "ultra"]);
     }
     assert_eq!(model["slug"], "gpt-6.1-sol");
-    assert_eq!(model["display_name"], "GPT-6.1-Sol");
-    assert_eq!(ui["displayName"], model["display_name"]);
+    assert_eq!(model["display_name"], "gpt-6.1-sol");
+    assert_eq!(ui["displayName"], "GPT-6.1-Sol");
     assert_eq!(ui["description"], model["description"]);
     assert_eq!(model["default_reasoning_level"], "medium");
     assert_eq!(ui["defaultReasoningEffort"], "medium");
@@ -525,8 +525,8 @@ fn build_catalog_json_prefers_runtime_models_cache_entry() {
     let model = &catalog["models"][0];
 
     assert_eq!(model["slug"], "gpt-5.5");
-    // 运行时缓存命中：display_name / shell_type 来自 models_cache.json（issue #2141）
-    assert_eq!(model["display_name"], "GPT-5.5 Runtime");
+    // 启动列表展示实际拉取的模型 ID；运行时缓存只补能力字段。
+    assert_eq!(model["display_name"], "gpt-5.5");
     assert_eq!(model["shell_type"], "unified_exec");
     // 窗口仍由 builder 权威生成：未显式配置时保留缓存的上限（#2191 语义）
     assert_eq!(model["context_window"], 272_000);
@@ -547,7 +547,7 @@ fn build_catalog_json_falls_back_to_bundled_without_runtime_cache() {
 
     // 无运行时缓存时回落静态资产，字段仍然齐全
     assert_eq!(model["slug"], "gpt-5.5");
-    assert_eq!(model["display_name"], "GPT-5.5");
+    assert_eq!(model["display_name"], "gpt-5.5");
     assert_eq!(model["context_window"], 272_000);
     assert!(model["supported_reasoning_levels"].as_array().is_some());
 }
@@ -603,7 +603,7 @@ fn vendor_metadata_chain_matches_all_providers() {
     };
 
     let k3 = find("kimi-k3");
-    assert_eq!(k3["display_name"], "Kimi K3");
+    assert_eq!(k3["display_name"], "kimi-k3");
     assert_eq!(k3["context_window"], 1_048_576);
     assert_eq!(k3["max_context_window"], 1_048_576);
     assert_eq!(k3["apply_patch_tool_type"], "freeform");
@@ -621,7 +621,7 @@ fn vendor_metadata_chain_matches_all_providers() {
     assert_eq!(effort_list(&qwen), vec!["low", "medium", "xhigh"]);
 
     let grok = find("grok-4.7");
-    assert_eq!(grok["display_name"], "Grok 4.7");
+    assert_eq!(grok["display_name"], "grok-4.7");
     assert_eq!(grok["context_window"], 500_000);
     assert_eq!(effort_list(&grok), vec!["low", "medium", "high", "xhigh"]);
 
@@ -647,8 +647,24 @@ fn vendor_metadata_chain_matches_case_insensitively() {
     let catalog: serde_json::Value =
         serde_json::from_str(&build_model_catalog_json(&entries, None)).unwrap();
     assert_eq!(catalog["models"][0]["slug"], "GLM-5.3");
-    assert_eq!(catalog["models"][0]["display_name"], "glm-5.3");
+    assert_eq!(catalog["models"][0]["display_name"], "GLM-5.3");
     assert_eq!(catalog["models"][0]["context_window"], 1_048_576);
+}
+
+#[test]
+fn catalog_display_name_keeps_the_fetched_provider_prefixed_id() {
+    let entries = collect_catalog_entries(
+        "vendor/kimi-k3",
+        &HashMap::new(),
+        &HashMap::new(),
+        "vendor/kimi-k3",
+    );
+    let catalog: serde_json::Value =
+        serde_json::from_str(&build_model_catalog_json(&entries, None)).unwrap();
+    let model = &catalog["models"][0];
+    assert_eq!(model["slug"], "vendor/kimi-k3");
+    assert_eq!(model["display_name"], "vendor/kimi-k3");
+    assert_eq!(model["context_window"], 1_048_576);
 }
 
 #[test]
@@ -890,7 +906,8 @@ fn gpt6_sol_luna_metadata_matches_official_efforts_fast_and_default_window() {
                 .collect::<Vec<_>>();
             assert_eq!(efforts, expected_efforts);
         }
-        assert_eq!(ui["displayName"], model["display_name"]);
+        assert_eq!(model["display_name"], slug);
+        assert!(ui["displayName"].as_str().is_some());
         assert_eq!(model["default_reasoning_level"], "medium");
         assert_eq!(ui["defaultReasoningEffort"], "medium");
         assert_eq!(model["context_window"], 272_000);

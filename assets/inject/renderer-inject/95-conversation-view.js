@@ -224,6 +224,7 @@
       hideAlerts: mixed,
       unlockSend: mixed,
     };
+    if (chatgptxBackendSettingsLoaded) officialUsageRuntime.lastPolicy = policy;
     return policy;
   }
 

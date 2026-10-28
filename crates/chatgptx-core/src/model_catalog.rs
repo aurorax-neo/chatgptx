@@ -1015,6 +1015,167 @@ fn parse_model_payload(payload: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// 上游返回顺序不稳定。拉取后统一整理为：
+/// 1. 有供应商前缀的模型按前缀分组；
+/// 2. 已知模型家族按常用顺序排列，未知家族放最后；
+/// 3. 同家族按版本号自然倒序，新版本在前，基础模型在快照/变体前；
+/// 4. 完全相同（忽略大小写）的模型只保留首次出现的写法。
+pub fn sort_relay_model_ids_for_display(models: &[String]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut unique = models
+        .iter()
+        .filter_map(|model| {
+            let trimmed = model.trim();
+            if trimmed.is_empty() || !seen.insert(trimmed.to_ascii_lowercase()) {
+                return None;
+            }
+            Some(trimmed.to_string())
+        })
+        .collect::<Vec<_>>();
+    unique.sort_by(|left, right| compare_model_ids_for_display(left, right));
+    unique
+}
+
+fn compare_model_ids_for_display(left: &str, right: &str) -> std::cmp::Ordering {
+    let left_provider = model_provider_group(left);
+    let right_provider = model_provider_group(right);
+    left_provider
+        .cmp(right_provider)
+        .then_with(|| model_family_rank(left).cmp(&model_family_rank(right)))
+        .then_with(|| compare_model_versions_desc(model_leaf(left), model_leaf(right)))
+        .then_with(|| left.to_ascii_lowercase().cmp(&right.to_ascii_lowercase()))
+        .then_with(|| left.cmp(right))
+}
+
+fn model_provider_group(model: &str) -> &str {
+    model.split_once('/').map(|(provider, _)| provider).unwrap_or("")
+}
+
+fn model_leaf(model: &str) -> &str {
+    model.rsplit('/').next().unwrap_or(model)
+}
+
+fn model_family_rank(model: &str) -> usize {
+    let leaf = model_leaf(model).to_ascii_lowercase();
+    const FAMILY_GROUPS: &[&[&str]] = &[
+        &["gpt", "chatgpt"],
+        &["o1", "o2", "o3", "o4", "o5", "o6", "o7", "o8", "o9"],
+        &["codex"],
+        &["claude"],
+        &["gemini"],
+        &["deepseek"],
+        &["qwen", "qwq"],
+        &["glm"],
+        &["kimi"],
+        &["grok"],
+        &["llama"],
+        &["mistral"],
+    ];
+    FAMILY_GROUPS
+        .iter()
+        .position(|prefixes| {
+            prefixes
+                .iter()
+                .any(|prefix| family_prefix_matches(&leaf, prefix))
+        })
+        .unwrap_or(FAMILY_GROUPS.len())
+}
+
+fn family_prefix_matches(model: &str, prefix: &str) -> bool {
+    let Some(rest) = model.strip_prefix(prefix) else {
+        return false;
+    };
+    rest.is_empty()
+        || rest
+            .chars()
+            .next()
+            .is_some_and(|value| value.is_ascii_digit() || matches!(value, '-' | '_' | '.' | ':'))
+}
+
+fn compare_model_versions_desc(left: &str, right: &str) -> std::cmp::Ordering {
+    let left_tokens = model_sort_tokens(left);
+    let right_tokens = model_sort_tokens(right);
+    for (left_token, right_token) in left_tokens.iter().zip(right_tokens.iter()) {
+        let order = match (left_token, right_token) {
+            (ModelSortToken::Number(left), ModelSortToken::Number(right)) => right.cmp(left),
+            (ModelSortToken::Text(left), ModelSortToken::Text(right)) => {
+                model_variant_rank(left)
+                    .cmp(&model_variant_rank(right))
+                    .then_with(|| left.cmp(right))
+            }
+            (ModelSortToken::Number(_), ModelSortToken::Text(_)) => {
+                std::cmp::Ordering::Less
+            }
+            (ModelSortToken::Text(_), ModelSortToken::Number(_)) => {
+                std::cmp::Ordering::Greater
+            }
+        };
+        if order != std::cmp::Ordering::Equal {
+            return order;
+        }
+    }
+    left_tokens
+        .len()
+        .cmp(&right_tokens.len())
+        .then_with(|| left.to_ascii_lowercase().cmp(&right.to_ascii_lowercase()))
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ModelSortToken {
+    Number(u64),
+    Text(String),
+}
+
+fn model_sort_tokens(value: &str) -> Vec<ModelSortToken> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut current_is_number = None;
+    let flush = |tokens: &mut Vec<ModelSortToken>,
+                 current: &mut String,
+                 current_is_number: &mut Option<bool>| {
+        if current.is_empty() {
+            return;
+        }
+        if *current_is_number == Some(true) {
+            tokens.push(ModelSortToken::Number(current.parse().unwrap_or(u64::MAX)));
+        } else {
+            tokens.push(ModelSortToken::Text(current.clone()));
+        }
+        current.clear();
+        *current_is_number = None;
+    };
+    for character in value.chars().flat_map(char::to_lowercase) {
+        let is_number = character.is_ascii_digit();
+        if character.is_ascii_alphanumeric() {
+            if current_is_number.is_some_and(|kind| kind != is_number) {
+                flush(&mut tokens, &mut current, &mut current_is_number);
+            }
+            current_is_number.get_or_insert(is_number);
+            current.push(character);
+        } else {
+            flush(&mut tokens, &mut current, &mut current_is_number);
+        }
+    }
+    flush(&mut tokens, &mut current, &mut current_is_number);
+    tokens
+}
+
+fn model_variant_rank(value: &str) -> usize {
+    match value {
+        "pro" => 0,
+        "max" => 1,
+        "thinking" => 2,
+        "high" => 3,
+        "turbo" => 4,
+        "flash" => 5,
+        "mini" => 6,
+        "lite" => 7,
+        "preview" => 8,
+        "latest" => 9,
+        _ => 100,
+    }
+}
+
 /// 模型 ID 字段取值。Gemini 的列表把 ID 放在 `name` 字段且带 `models/` 前缀
 /// （如 `models/gemini-2.5-pro`），剥掉前缀让 ID 与请求体里的 `model` 值一致。
 fn model_id_from_field<'a>(key: &str, value: &'a str) -> &'a str {
@@ -1373,6 +1534,55 @@ mod model_fetch_tests {
             "models": [{"name": "moonshot-v1"}, {"id": "kimi-k2.6"}]
         }));
         assert_eq!(models, vec!["moonshot-v1", "kimi-k2.6"]);
+    }
+
+    #[test]
+    fn relay_model_ids_are_grouped_and_sorted_newest_first() {
+        let models = vec![
+            "zeta/gpt-5.4".to_string(),
+            "gpt-4o-2024-08-06".to_string(),
+            "claude-opus-4-6".to_string(),
+            "gpt-5.2".to_string(),
+            "gpt-5.10".to_string(),
+            "gpt-5.4-mini".to_string(),
+            "gpt-5.4".to_string(),
+            "alpha/gpt-5.2".to_string(),
+            "alpha/gpt-5.4".to_string(),
+            "gpt-5.4".to_string(),
+            "  GPT-5.4  ".to_string(),
+        ];
+
+        assert_eq!(
+            sort_relay_model_ids_for_display(&models),
+            vec![
+                "gpt-5.10",
+                "gpt-5.4",
+                "gpt-5.4-mini",
+                "gpt-5.2",
+                "gpt-4o-2024-08-06",
+                "claude-opus-4-6",
+                "alpha/gpt-5.4",
+                "alpha/gpt-5.2",
+                "zeta/gpt-5.4",
+            ]
+        );
+    }
+
+    #[test]
+    fn relay_model_sort_keeps_unknown_models_deterministic() {
+        let models = vec![
+            "vendor-b/z".to_string(),
+            "vendor-a/unknown-2".to_string(),
+            "vendor-a/unknown-10".to_string(),
+        ];
+        assert_eq!(
+            sort_relay_model_ids_for_display(&models),
+            vec![
+                "vendor-a/unknown-10",
+                "vendor-a/unknown-2",
+                "vendor-b/z",
+            ]
+        );
     }
 
     #[tokio::test]

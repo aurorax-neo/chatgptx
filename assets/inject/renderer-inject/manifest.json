@@ -108,7 +108,7 @@
     {
       "name": "95-conversation-view.js",
       "description": "会话视图运行时、官方用量策略重写、扫描主循环",
-      "lines": 924
+      "lines": 925
     },
     {
       "name": "96-whale-compat.js",

@@ -83,8 +83,10 @@ impl BridgeReinjectBackoff {
         self.healthy_since = None;
     }
 }
-const MACOS_DEBUG_TAKEOVER_WAIT_MS: u64 = 5_000;
+const MACOS_DEBUG_TAKEOVER_GRACEFUL_WAIT_MS: u64 = 8_000;
+const MACOS_DEBUG_TAKEOVER_TOTAL_WAIT_MS: u64 = 20_000;
 const MACOS_DEBUG_TAKEOVER_INTERVAL_MS: u64 = 100;
+const MACOS_CLEANUP_COMMAND_TIMEOUT_MS: u64 = 5_000;
 
 /// 协议代理的端口写死在 `config.toml` 的 `base_url = "http://127.0.0.1:57321/v1"` 里，
 /// 不能像普通 helper 端口那样临时换一个空闲的，否则 Codex CLI 会连到没人监听的地址。
@@ -1021,6 +1023,7 @@ impl LaunchHooks for DefaultLaunchHooks {
     fn cleanup_unsupported_config(&self) -> anyhow::Result<()> {
         let home = crate::relay_config::default_codex_home_dir();
         crate::relay_config::cleanup_unsupported_approval_policies_in_home(&home)?;
+        crate::relay_config::normalize_managed_catalog_display_names(&home)?;
         Ok(())
     }
 
@@ -1279,7 +1282,7 @@ impl LaunchHooks for DefaultLaunchHooks {
                             "debug_port": debug_port
                         }),
                     );
-                    quit_macos_app_and_wait(app_dir).await?;
+                    quit_macos_app_and_wait(app_dir, debug_port).await?;
                     MacosCleanupPolicy::QuitIfNotPreviouslyRunning
                 }
             };
@@ -4187,24 +4190,84 @@ async fn run_macos_cleanup_command(
     let Some(executable) = command.first() else {
         return Ok(());
     };
-    let _ = Command::new(executable)
+    let mut child = match Command::new(executable)
         .args(&command[1..])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status()
-        .await
-        .with_context(|| format!("failed to request macOS app quit for {}", app_dir.display()))?;
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(error) => {
+            let _ = crate::diagnostic_log::append_diagnostic_log(
+                "launcher.macos_cleanup_command_spawn_failed",
+                serde_json::json!({
+                    "app_dir": app_dir,
+                    "error": error.to_string()
+                }),
+            );
+            return Ok(());
+        }
+    };
+    match tokio::time::timeout(
+        std::time::Duration::from_millis(MACOS_CLEANUP_COMMAND_TIMEOUT_MS),
+        child.wait(),
+    )
+    .await
+    {
+        Ok(status) => {
+            status.with_context(|| {
+                format!("failed to wait for macOS app quit for {}", app_dir.display())
+            })?;
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            let _ = crate::diagnostic_log::append_diagnostic_log(
+                "launcher.macos_cleanup_command_timeout",
+                serde_json::json!({
+                    "app_dir": app_dir,
+                    "timeout_ms": MACOS_CLEANUP_COMMAND_TIMEOUT_MS
+                }),
+            );
+        }
+    }
     Ok(())
 }
 
-async fn quit_macos_app_and_wait(app_dir: &Path) -> anyhow::Result<()> {
+async fn quit_macos_app_and_wait(app_dir: &Path, debug_port: u16) -> anyhow::Result<()> {
     run_macos_cleanup_command(app_dir, MacosCleanupPolicy::QuitIfNotPreviouslyRunning).await?;
-    let deadline = tokio::time::Instant::now()
-        + std::time::Duration::from_millis(MACOS_DEBUG_TAKEOVER_WAIT_MS);
+    let started = tokio::time::Instant::now();
+    let graceful_deadline =
+        started + std::time::Duration::from_millis(MACOS_DEBUG_TAKEOVER_GRACEFUL_WAIT_MS);
     while is_macos_app_running(app_dir).await {
-        if tokio::time::Instant::now() >= deadline {
+        if tokio::time::Instant::now() >= graceful_deadline {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(
+            MACOS_DEBUG_TAKEOVER_INTERVAL_MS,
+        ))
+        .await;
+    }
+    if is_macos_app_running(app_dir).await {
+        let _ = crate::diagnostic_log::append_diagnostic_log(
+            "launcher.macos_existing_app_graceful_quit_timeout",
+            serde_json::json!({
+                "app_dir": app_dir,
+                "debug_port": debug_port,
+                "graceful_wait_ms": MACOS_DEBUG_TAKEOVER_GRACEFUL_WAIT_MS
+            }),
+        );
+        tokio::task::spawn_blocking(move || {
+            crate::watcher::stop_main_codex_processes_and_wait(debug_port);
+        })
+        .await
+        .context("macOS Codex termination task failed")?;
+    }
+    let total_deadline =
+        started + std::time::Duration::from_millis(MACOS_DEBUG_TAKEOVER_TOTAL_WAIT_MS);
+    while is_macos_app_running(app_dir).await {
+        if tokio::time::Instant::now() >= total_deadline {
             anyhow::bail!(
-                "macOS app did not exit before debug relaunch: {}",
+                "macOS app did not exit after graceful quit and forced termination: {}",
                 app_dir.display()
             );
         }

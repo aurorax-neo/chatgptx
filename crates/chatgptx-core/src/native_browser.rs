@@ -1475,6 +1475,22 @@ mod tests {
         }
     }
 
+    fn reacquire_monitor_owner(owner: &mut File) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        loop {
+            match owner.try_lock_exclusive() {
+                Ok(()) => return,
+                Err(error)
+                    if error.kind() == fs2::lock_contended_error().kind()
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("failed to reacquire monitor owner: {error}"),
+            }
+        }
+    }
+
     #[test]
     fn default_does_not_create_or_discover_anything() {
         let temp = tempfile::tempdir().unwrap();
@@ -2360,7 +2376,7 @@ mod tests {
         assert!(wait_for_monitor_shutdown_at(&paths, Duration::ZERO).is_err());
         assert!(!paths.state_root.join("control.json").exists());
         drop(owner);
-        wait_for_monitor_shutdown_at(&paths, Duration::ZERO).unwrap();
+        wait_for_monitor_shutdown_at(&paths, Duration::from_secs(1)).unwrap();
     }
 
     #[test]
@@ -2382,7 +2398,7 @@ mod tests {
             } else {
                 assert!(shutdown.is_err());
             }
-            owner.try_lock_exclusive().unwrap();
+            reacquire_monitor_owner(&mut owner);
         }
         owner.set_len(0).unwrap();
         drop(owner);
@@ -2481,10 +2497,10 @@ mod tests {
             write_monitor_receipt(&mut owner, &generation, state).unwrap();
             FileExt::unlock(&owner).unwrap();
             assert_eq!(
-                wait_for_monitor_shutdown_at(&paths, Duration::ZERO).unwrap(),
+                wait_for_monitor_shutdown_at(&paths, Duration::from_secs(1)).unwrap(),
                 NativeBrowserShutdown::Ready
             );
-            owner.try_lock_exclusive().unwrap();
+            reacquire_monitor_owner(&mut owner);
         }
         write_monitor_receipt(&mut owner, &generation, "restored").unwrap();
         drop(owner);

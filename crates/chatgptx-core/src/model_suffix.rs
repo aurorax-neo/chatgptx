@@ -332,7 +332,13 @@ const COMPATIBILITY_METADATA_SOURCES: &[(&'static str, &'static str)] = &[
 /// 判定与生成链的模板查找保持一致：精调/供应商层、运行时官方缓存、bundled
 /// 静态资产任一命中即算。
 pub fn requires_bundled_metadata_catalog(slug: &str) -> bool {
-    resolve_builtin_metadata(slug).is_some()
+    let slug = normalized_model_slug(slug);
+    if slug.is_empty() {
+        return false;
+    }
+    resolve_compatibility_metadata(&slug).is_some()
+        || runtime_models_cache_entry(&slug).is_some()
+        || bundled_template_entry(&slug).is_some()
 }
 
 pub fn model_ui_metadata(slug: &str) -> Option<Value> {
@@ -712,6 +718,10 @@ pub(crate) fn build_model_catalog_json_with_capabilities(
             }
             model["context_window"] = json!(context_window);
             model["max_context_window"] = json!(max_context_window);
+            // 启动模型列表必须显示用户实际拉取/配置的原始模型 ID。元数据只负责补
+            // 上下文、推理和工具能力，不能用 models.dev 或内置目录的展示名替换 slug；
+            // 用户显式导入的 display_name 会在 catalog 写盘后的 override 阶段覆盖这里。
+            model["display_name"] = json!(entry.display_name);
             // 通用自定义模型显示完整窗口；DeepSeek Responses 保留官方目录的 95%。
             if !deepseek_metadata {
                 model["effective_context_window_percent"] = json!(100);

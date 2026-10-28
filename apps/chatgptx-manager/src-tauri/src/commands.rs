@@ -5390,10 +5390,14 @@ pub async fn fetch_relay_profile_models(
         profile.name.trim()
     };
     match chatgptx_core::model_catalog::fetch_relay_profile_model_ids(&profile).await {
-        Ok((models, endpoint)) => ok(
-            &format!("已从「{profile_name}」获取 {} 个模型。", models.len()),
-            RelayProfileModelsPayload { models, endpoint },
-        ),
+        Ok((models, endpoint)) => {
+            let models =
+                chatgptx_core::model_catalog::sort_relay_model_ids_for_display(&models);
+            ok(
+                &format!("已从「{profile_name}」获取 {} 个模型。", models.len()),
+                RelayProfileModelsPayload { models, endpoint },
+            )
+        }
         Err(error) => failed(
             &format!("从「{profile_name}」获取模型失败：{error}"),
             RelayProfileModelsPayload {
