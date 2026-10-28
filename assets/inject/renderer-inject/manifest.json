@@ -78,7 +78,7 @@
     {
       "name": "83-usage-statusline.js",
       "description": "输入框下方用量状态栏：生成速度、缓存命中率与上下文占用",
-      "lines": 400
+      "lines": 403
     },
     {
       "name": "90-action-groups.js",

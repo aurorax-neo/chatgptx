@@ -189,3 +189,24 @@ test("会话 id 只认 composer 上的实时标识，新会话草稿视为无会
   assert.equal(chatgptxUsageThreadId(card("short")), "");
   assert.equal(chatgptxUsageThreadId(undefined), "");
 });
+
+test("桥接逻辑失败也计入退避，成功后再清零", async () => {
+  const refreshSource = [
+    declaration("chatgptxUsageState"),
+    declaration("chatgptxUsageRefresh"),
+    "return { chatgptxUsageRefresh, chatgptxUsageState };",
+  ].join("\n");
+  let response: Record<string, unknown> = { status: "failed", events: [] };
+  const factory = new Function("postJson", refreshSource);
+  const runtime = factory(async () => response) as {
+    chatgptxUsageRefresh: (threadId: string) => Promise<unknown>;
+    chatgptxUsageState: { failures: number };
+  };
+
+  assert.equal(await runtime.chatgptxUsageRefresh("thread-123"), null);
+  assert.equal(runtime.chatgptxUsageState.failures, 1);
+
+  response = { status: "ok", events: [event(0, 100)] };
+  assert.equal((await runtime.chatgptxUsageRefresh("thread-123") as unknown[]).length, 1);
+  assert.equal(runtime.chatgptxUsageState.failures, 0);
+});

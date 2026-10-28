@@ -13706,8 +13706,11 @@
     chatgptxUsageState.inFlight = true;
     try {
       const result = await postJson("/thread-usage-live", { session_id: threadId });
+      if (result?.status !== "ok" || !Array.isArray(result.events)) {
+        chatgptxUsageState.failures += 1;
+        return null;
+      }
       chatgptxUsageState.failures = 0;
-      if (result?.status !== "ok" || !Array.isArray(result.events)) return null;
       return result.events;
     } finally {
       chatgptxUsageState.inFlight = false;
