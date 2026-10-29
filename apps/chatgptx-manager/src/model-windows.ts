@@ -65,6 +65,35 @@ export function reorderModelWindowRows(
   return next;
 }
 
+/// 删除模型行时同步处理「配置模型」：
+/// - 删除的不是当前配置模型：配置保持不变；
+/// - 删除的是当前配置模型：自动选中剩余第一行；
+/// - 删除最后一行：清空配置模型，避免下拉框仍指向已不存在的模型。
+export function removeModelWindowRowWithConfiguredFallback(
+  rows: ModelWindowRow[],
+  index: number,
+  configuredModel?: string,
+): { rows: ModelWindowRow[]; configuredModel: string } {
+  const currentConfigured = (configuredModel || "").trim();
+  if (index < 0 || index >= rows.length) {
+    return { rows, configuredModel: currentConfigured };
+  }
+  const removed = rows[index].model.trim();
+  const removedKey = (modelMapKeyFromRowName(removed) || removed).toLowerCase();
+  const configuredKey = (
+    modelMapKeyFromRowName(currentConfigured) || currentConfigured
+  ).toLowerCase();
+  const nextRows = rows.filter((_, rowIndex) => rowIndex !== index);
+  if (!removedKey || removedKey !== configuredKey) {
+    return { rows: nextRows, configuredModel: currentConfigured };
+  }
+  const fallback = nextRows.map((row) => row.model.trim()).find(Boolean) || "";
+  return {
+    rows: nextRows,
+    configuredModel: fallback ? modelSlugFromRowName(fallback) || fallback : "",
+  };
+}
+
 function asStringMap(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, string>;

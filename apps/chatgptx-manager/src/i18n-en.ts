@@ -1140,12 +1140,9 @@ export const EN_PLAIN: Record<string, string> = {
     "No default provider yet: click \"Set as default\" at the end of a member row above. Requests without the cpx- prefix go to it verbatim; without one they error.",
   "模型聚合必须指定「默认供应商」：在成员列表里点某一行的「设为默认」。不带 cpx- 前缀的请求会原样交给它，没设就报错。":
     "Model aggregation requires a default provider: click \"Set as default\" on one of the member rows. Requests without the cpx- prefix go to it verbatim; without one they error.",
-  "配置模型不能从列表里删除": "The configured model cannot be removed from the list",
   "先选择聚合类型（模型聚合 / 故障转移）再保存。": "Choose the aggregation type (model aggregation / failover) before saving.",
   "默认供应商：{0}。不带 cpx- 前缀的请求（旧会话、自动压缩带的模型名等）会原样交给它；带 cpx- 前缀但解析不出来的 ID 一律报错，不回落。":
     "Default provider: {0}. Requests without the cpx- prefix (old sessions, auto-compaction model names, ...) go to it verbatim; cpx- prefixed IDs that cannot be resolved are rejected instead of falling back.",
-  "「{0}」是当前「配置模型」：Codex 会始终把它发布在模型列表里，删掉保存后也会被加回来。要减少模型，请先把下方「配置模型」改成要保留的那个，再删这一行。":
-    "\"{0}\" is the configured model: Codex always publishes it in the model list, so removing it only brings it back on save. To drop models, change the configured model below to the one you keep, then delete this row.",
   "未设置（未匹配到成员的请求会报错）": "Not set (requests matching no member will error)",
   "副本版本": "Copy version",
   "模型固定绑定 · {0} 个成员": "Models stay bound · {0} members",

@@ -163,6 +163,7 @@ import {
   mergeModelWindowRows,
   modelWindowRowsFromProfile,
   modelWindowRowsValidationError,
+  removeModelWindowRowWithConfiguredFallback,
   serializeModelWindowRows,
   reorderModelWindowRows,
   type ImageHandling,
@@ -7222,23 +7223,22 @@ function RelayProfileEditor({
     setMetadataImportError("");
   };
   const removeModelWindowRow = (index: number) => {
+    if (index < 0 || index >= modelWindowRows.length) return;
     const removedSlug = modelWindowRows[index]?.model.trim() || modelSlugOriginsRef.current[index] || "";
-    // 「配置模型」不能被删掉：保存时后端会把 profile.model 合并回 model_list
-    // （relay_config::merge_model_into_model_list），删了也会被加回来、看起来像"保存没生效"。
-    const configuredSlug = parseModelSuffix(profile.model || "").slug.trim();
-    if (removedSlug && configuredSlug && removedSlug === configuredSlug) {
-      void actions.showMessage(
-        t("配置模型不能从列表里删除"),
-        tf("「{0}」是当前「配置模型」：Codex 会始终把它发布在模型列表里，删掉保存后也会被加回来。要减少模型，请先把下方「配置模型」改成要保留的那个，再删这一行。", [removedSlug]),
-      );
-      return;
-    }
-    const nextRows = modelWindowRows.filter((_, rowIndex) => rowIndex !== index);
+    const removal = removeModelWindowRowWithConfiguredFallback(
+      modelWindowRows,
+      index,
+      profile.model,
+    );
+    const nextRows = removal.rows;
     const nextOrigins = modelSlugOriginsRef.current.filter((_, rowIndex) => rowIndex !== index);
     const resolved = resolvePendingModelSlugRenames(nextRows, nextOrigins, profile.modelMetadata);
     modelSlugOriginsRef.current = resolved.origins;
     // 删到没有模型就保持空列表，不再补一行空行。
     setModelWindowRows(nextRows);
+    if (removal.configuredModel !== (profile.model || "").trim()) {
+      updateDraft({ model: removal.configuredModel });
+    }
     const slugStillPresent = nextRows.some((row) => row.model.trim() === removedSlug)
       || resolved.origins.includes(removedSlug);
     const nextMetadata = removedSlug && !slugStillPresent

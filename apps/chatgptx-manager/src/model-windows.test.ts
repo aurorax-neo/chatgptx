@@ -10,6 +10,7 @@ import {
   serializeModelWindowRows,
   mergeModelWindowRows,
   reorderModelWindowRows,
+  removeModelWindowRowWithConfiguredFallback,
 } from "./model-windows.ts";
 
 // 类型检查：确保 RelayProfile 包含 modelWindows 和 modelVlm 字段
@@ -245,6 +246,25 @@ describe("model-windows helpers", () => {
       { model: "b", window: "200K", autoCompact: "80%", imageHandling: "strip" },
       { model: "c", window: "", autoCompact: "70%", imageHandling: "vlm" },
     ]);
+  });
+
+  it("删除当前配置模型时自动选择剩余第一行，删除最后一行时清空", () => {
+    const rows = modelWindowRowsFromProfile("a\nb\nc", "{}");
+    const first = removeModelWindowRowWithConfiguredFallback(rows, 0, "a");
+    assert.deepStrictEqual(first.rows.map((row) => row.model), ["b", "c"]);
+    assert.equal(first.configuredModel, "b");
+
+    const untouched = removeModelWindowRowWithConfiguredFallback(rows, 1, "a");
+    assert.deepStrictEqual(untouched.rows.map((row) => row.model), ["a", "c"]);
+    assert.equal(untouched.configuredModel, "a");
+
+    const last = removeModelWindowRowWithConfiguredFallback(
+      modelWindowRowsFromProfile("only[1M]", "{}"),
+      0,
+      "only",
+    );
+    assert.deepStrictEqual(last.rows, []);
+    assert.equal(last.configuredModel, "");
   });
 });
 
