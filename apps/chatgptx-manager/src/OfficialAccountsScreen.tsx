@@ -28,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { t } from "@/i18n";
 import { PageHeader } from "./ManagementPages";
+import { resolveOfficialAccountMode } from "./official-accounts-mode";
 import { usePopoverLayer } from "./use-popover-layer";
 
 export type OfficialQuota = {
@@ -540,7 +541,17 @@ export function OfficialAccountsScreen({
 
   useEffect(() => {
     void loadSnapshot(false);
-  }, []);
+    const refresh = () => {
+      if (document.visibilityState === "hidden") return;
+      void loadSnapshot(true);
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [activeRelayId]);
 
   const filteredAccounts = useMemo(() => {
     const list = snapshot?.accounts ?? [];
@@ -826,18 +837,17 @@ export function OfficialAccountsScreen({
     }
   };
 
-  const activeRelayProfile = relayProfiles.find((p) => p.id === activeRelayId);
-  const activeOfficialAccount = snapshot?.accounts.find((a) => a.isActive) ?? null;
-  const activeModeSummary = activeOfficialAccount
-    ? (() => {
-        const bound = relayProfiles.find((r) => r.id === activeOfficialAccount.boundRelayProfileId);
-        return bound
-          ? `${t("官方账号")} + ${bound.name}`
-          : `${t("纯官方登录")} (${activeOfficialAccount.email})`;
-      })()
-    : activeRelayProfile
-      ? `${t("纯 API 模式")} (${activeRelayProfile.name})`
-      : t("未选择");
+  const activeMode = resolveOfficialAccountMode(snapshot, relayProfiles, activeRelayId);
+  const liveAccountEmail = activeMode.kind === "mixed" || activeMode.kind === "official"
+    ? activeMode.liveEmail
+    : "";
+  const activeModeSummary = activeMode.kind === "mixed"
+    ? `${t("官方账号")} + ${activeMode.profile.name}`
+    : activeMode.kind === "official"
+      ? `${t("纯官方登录")} (${activeMode.liveEmail})`
+      : activeMode.kind === "pureApi"
+        ? `${t("纯 API 模式")} (${activeMode.profile.name})`
+        : t("未选择");
   return (
     <div className="mg-page relay-management-page">
       <PageHeader
@@ -899,7 +909,7 @@ export function OfficialAccountsScreen({
             <div className="metric-list">
               <div>
                 <span>{t("本机当前登录")}</span>
-                <strong>{snapshot?.liveAccountEmail || t("未检测到官方登录")}</strong>
+                <strong>{liveAccountEmail || t("未检测到官方登录")}</strong>
               </div>
               <div>
                 <span>{t("已保存账号")}</span>
