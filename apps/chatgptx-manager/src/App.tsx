@@ -6447,7 +6447,7 @@ function RelayProfileDetail({
   const draftWithModelRows = () => {
     // 保存时再兜底一次：避免行编辑守卫拦下外部同步时，配置模型被漏出 model_list。
     const serializedRows = serializeModelWindowRows(
-      ensureConfiguredModelRow(modelWindowRows, draft.model || profile.model),
+      ensureConfiguredModelRow(modelWindowRows, draft.model),
     );
     const validSlugs = serializedRows.modelList.split("\n").map((slug) => slug.trim()).filter(Boolean);
     return {
@@ -6792,7 +6792,7 @@ function RelayProfileEditor({
     if (configuredModelValue && !seen.has(configuredModelValue)) {
       options.unshift({ value: configuredModelValue, label: configuredModelValue });
     }
-    if (!configuredModelValue && options.length) {
+    if (!configuredModelValue) {
       options.unshift({ value: "", label: t("请选择模型"), disabled: true });
     }
     return options;
@@ -7423,7 +7423,10 @@ function RelayProfileEditor({
                     </Button>
                     <Button
                       disabled={!modelWindowRows.some((row) => row.model.trim())}
-                      onClick={() => setModelWindowRows(ensureConfiguredModelRow([], profile.model))}
+                      onClick={() => {
+                        setModelWindowRows([]);
+                        updateDraft({ model: "" });
+                      }}
                       size="sm"
                       title={t("清空模型")}
                       type="button"

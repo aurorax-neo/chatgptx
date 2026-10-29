@@ -86,3 +86,12 @@ test("配置模型位于模型列表下方并使用下拉选择", () => {
   assert.match(block, /<AppSelect/);
   assert.doesNotMatch(block, /<Input/);
 });
+
+test("清空模型同时清空模型列表与配置模型", () => {
+  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+  const title = app.indexOf('title={t("清空模型")}');
+  assert.ok(title > 0);
+  const block = app.slice(app.lastIndexOf("<Button", title), title);
+  assert.match(block, /setModelWindowRows\(\[\]\)/);
+  assert.match(block, /updateDraft\(\{ model: "" \}\)/);
+});
