@@ -482,6 +482,46 @@ pub fn write_auth_json_and_sync_store(codex_home: &Path, auth_json: &str) -> any
     sync_codex_keychain_if_present(codex_home, auth_json);
     Ok(())
 }
+
+/// 绑定官方账号的第三方供应商必须让 Codex 读取 auth.json/Keychain。
+fn ensure_live_provider_requires_openai_auth(codex_home: &Path) -> anyhow::Result<()> {
+    let config_path = codex_home.join("config.toml");
+    let Ok(existing) = std::fs::read_to_string(&config_path) else {
+        return Ok(());
+    };
+    let Ok(mut doc) = existing.parse::<toml_edit::DocumentMut>() else {
+        return Ok(());
+    };
+    let provider_key = doc
+        .get("model_provider")
+        .and_then(toml_edit::Item::as_str)
+        .map(str::trim)
+        .unwrap_or("custom")
+        .to_string();
+    let Some(providers) = doc
+        .get_mut("model_providers")
+        .and_then(toml_edit::Item::as_table_like_mut)
+    else {
+        return Ok(());
+    };
+    let Some(provider) = providers
+        .get_mut(&provider_key)
+        .and_then(toml_edit::Item::as_table_like_mut)
+    else {
+        return Ok(());
+    };
+    if provider
+        .get("requires_openai_auth")
+        .and_then(toml_edit::Item::as_bool)
+        == Some(true)
+    {
+        return Ok(());
+    }
+    provider.insert("requires_openai_auth", toml_edit::value(true));
+    crate::settings::atomic_write(&config_path, doc.to_string().as_bytes())?;
+    Ok(())
+}
+
 fn state_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -1498,26 +1538,7 @@ pub fn switch_official_account(
             )?;
             // 官方账号绑定第三方供应商时，必须显式确保 config.toml 中的当前 provider 携带 requires_openai_auth = true，
             // 否则 Codex 客户端将把其当做纯无账号 API 供应商，跳过读取 auth.json / Keychain 中的官方 OAuth tokens，导致未登录！
-            let config_path = codex_home.join("config.toml");
-            if let Ok(existing_cfg) = std::fs::read_to_string(&config_path) {
-                if let Ok(mut doc) = existing_cfg.parse::<toml_edit::DocumentMut>() {
-                    let provider_key = doc
-                        .get("model_provider")
-                        .and_then(toml_edit::Item::as_str)
-                        .map(str::trim)
-                        .unwrap_or("custom")
-                        .to_string();
-                    if let Some(providers) = doc
-                        .get_mut("model_providers")
-                        .and_then(toml_edit::Item::as_table_like_mut)
-                    {
-                        if let Some(p) = providers.get_mut(&provider_key).and_then(toml_edit::Item::as_table_like_mut) {
-                            p.insert("requires_openai_auth", toml_edit::value(true));
-                        }
-                    }
-                    let _ = crate::settings::atomic_write(&config_path, doc.to_string().as_bytes());
-                }
-            }
+            ensure_live_provider_requires_openai_auth(codex_home)?;
             let final_live = std::fs::read_to_string(codex_home.join("auth.json"))
                 .ok()
                 .or(base_auth);
@@ -1666,6 +1687,7 @@ pub fn sync_bound_official_account_on_relay_apply(
         profile.relay_mode != RelayMode::Official || profile.official_mix_api_key;
     let merged = build_auth_json_for_account(&account, existing_live.as_deref(), preserve_api_key)?;
     write_auth_json_and_sync_store(codex_home, &merged)?;
+    ensure_live_provider_requires_openai_auth(codex_home)?;
     Ok(Some(account.email))
 }
 // OAuth PKCE 登录流程（参考 cockpit-tools `codex_oauth.rs`）
@@ -2698,6 +2720,68 @@ mod tests {
         assert!(auth_text.contains("\"acct_multi_99\""), "auth.json: {auth_text}");
         assert!(auth_text.contains("\"sk-third-party-key\""), "auth.json: {auth_text}");
         assert!(config_text.contains("https://api.thirdparty.test/v1"), "config.toml: {config_text}");
+    }
+
+    #[test]
+    fn sync_bound_official_account_injects_tokens_and_requires_openai_auth() {
+        let _guard = crate::paths::settings_path_test_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let settings_path = temp.path().join("settings.json");
+        let codex_home = temp.path().join("codex-home");
+        std::fs::create_dir_all(&codex_home).unwrap();
+        let prev = crate::paths::set_settings_path_for_tests(Some(settings_path));
+        std::fs::write(
+            codex_home.join("config.toml"),
+            "model_provider = \"custom\"\n\n[model_providers.custom]\nname = \"custom\"\nwire_api = \"responses\"\nrequires_openai_auth = false\nbase_url = \"https://relay.test/v1\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            codex_home.join("auth.json"),
+            "{\"auth_mode\":\"apikey\",\"OPENAI_API_KEY\":\"sk-relay\"}",
+        )
+        .unwrap();
+
+        let jwt = make_fake_jwt(json!({
+            "email": "bound@openai.com",
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": "acct_bound_sync",
+                "chatgpt_plan_type": "pro"
+            }
+        }));
+        let mut account = build_account_from_tokens(
+            OfficialTokens {
+                id_token: jwt.clone(),
+                access_token: jwt,
+                refresh_token: Some("rt_bound_sync".to_string()),
+            },
+            None,
+            None,
+        )
+        .unwrap();
+        account.bound_relay_profile_id = Some("relay-bound".to_string());
+        let saved = upsert_official_account(account, false).unwrap();
+        let profile = RelayProfile {
+            id: "relay-bound".to_string(),
+            name: "Relay Bound".to_string(),
+            relay_mode: RelayMode::PureApi,
+            api_key: "sk-relay".to_string(),
+            ..RelayProfile::default()
+        };
+
+        let email = sync_bound_official_account_on_relay_apply(&codex_home, &profile).unwrap();
+        let state = load_official_accounts_state();
+        crate::paths::set_settings_path_for_tests(prev);
+
+        assert_eq!(email.as_deref(), Some("bound@openai.com"));
+        assert_eq!(state.active_account_id, Some(saved.id));
+        let auth_text = std::fs::read_to_string(codex_home.join("auth.json")).unwrap();
+        assert!(auth_text.contains("\"acct_bound_sync\""), "auth.json: {auth_text}");
+        assert!(auth_text.contains("\"sk-relay\""), "auth.json: {auth_text}");
+        let config_text = std::fs::read_to_string(codex_home.join("config.toml")).unwrap();
+        assert!(
+            config_text.contains("requires_openai_auth = true"),
+            "config.toml: {config_text}"
+        );
     }
 
     #[test]

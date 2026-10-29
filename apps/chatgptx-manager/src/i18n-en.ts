@@ -1073,6 +1073,8 @@ export const EN_PLAIN: Record<string, string> = {
   "纯文本模型请配置此项": "Configure this for text-only models",
   "纯 API 就绪：会同时写入 config.toml 和 auth.json。": "Pure API ready: writes both config.toml and auth.json.",
   "纯 API 模式": "Pure API mode",
+  "供应商已切换（官方账号 + API 模式）。":
+    "Provider switched (official account + API mode).",
   "纯 API 配置未完整写入：请检查此供应商是否有 OPENAI_API_KEY，且 config.toml 是否包含 model_provider / provider / base_url。":
     "Pure API config is incomplete: check whether this provider has OPENAI_API_KEY and whether config.toml includes model_provider / provider / base_url.",
   "官方登录未混入 API 时不写入会话 provider": "Official login without mixed API does not write a session provider",

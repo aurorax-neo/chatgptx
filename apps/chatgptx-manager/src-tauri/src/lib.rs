@@ -45,6 +45,7 @@ pub fn run() {
             }),
         );
     }
+    commands::sync_bound_official_account_on_startup();
     #[cfg(target_os = "macos")]
     if let Some(root) = chatgptx_core::install::default_install_root() {
         match chatgptx_core::install::macos::migrate_legacy_manager_bundle(&root) {

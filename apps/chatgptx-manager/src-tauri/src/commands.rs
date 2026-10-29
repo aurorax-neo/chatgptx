@@ -2237,6 +2237,7 @@ where
             }
             return Err(error);
         }
+        let _ = sync_active_bound_official_account(settings, home);
         if let Some(warning) =
             chatgptx_core::aggregate_catalog::subagent_conflict_warning(home, settings)
         {
@@ -2384,6 +2385,39 @@ fn sync_active_relay_to_home(
         chatgptx_core::protocol_proxy::protocol_proxy_port(),
         chatgptx_core::relay_config::relay_session_provider_from_config(&relay.config_contents),
     )
+}
+
+fn sync_active_bound_official_account(
+    settings: &BackendSettings,
+    home: &Path,
+) -> Option<String> {
+    if !settings.relay_profiles_enabled {
+        return None;
+    }
+    let relay = settings.active_relay_profile();
+    if relay.relay_mode == chatgptx_core::settings::RelayMode::Aggregate {
+        return None;
+    }
+    match chatgptx_core::official_accounts::sync_bound_official_account_on_relay_apply(home, &relay)
+    {
+        Ok(email) => email,
+        Err(error) => {
+            log_manager_event(
+                "manager.sync_bound_official_account.failed",
+                json!({
+                    "activeRelayId": settings.active_relay_id,
+                    "error": error.to_string()
+                }),
+            );
+            None
+        }
+    }
+}
+
+pub(crate) fn sync_bound_official_account_on_startup() {
+    let settings = SettingsStore::default().load().unwrap_or_default();
+    let home = chatgptx_core::relay_config::default_codex_home_dir();
+    let _ = sync_active_bound_official_account(&settings, &home);
 }
 
 fn normalize_launch_request(mut request: LaunchRequest) -> LaunchRequest {
@@ -4743,7 +4777,16 @@ pub fn switch_relay_profile(
     ) {
         Ok(result) => {
             let active_prof = result.settings.active_relay_profile();
-            if active_prof.relay_mode != chatgptx_core::settings::RelayMode::Aggregate {
+            let bound_official_email = if active_prof.relay_mode
+                != chatgptx_core::settings::RelayMode::Aggregate
+            {
+                sync_active_bound_official_account(&result.settings, &home)
+            } else {
+                None
+            };
+            if active_prof.relay_mode != chatgptx_core::settings::RelayMode::Aggregate
+                && bound_official_email.is_none()
+            {
                 let _ = chatgptx_core::official_accounts::deactivate_official_account_for_pure_api(
                     &home,
                     &active_prof.api_key,
@@ -4759,7 +4802,11 @@ pub fn switch_relay_profile(
                 }),
             );
             ok(
-                "供应商已切换（纯 API 模式）。",
+                if bound_official_email.is_some() {
+                    "供应商已切换（官方账号 + API 模式）。"
+                } else {
+                    "供应商已切换（纯 API 模式）。"
+                },
                 relay_switch_payload(result.settings, status, result.backup_path),
             )
         }
