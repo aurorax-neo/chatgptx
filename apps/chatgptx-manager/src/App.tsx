@@ -159,6 +159,7 @@ import {
   type RelayModelRoute,
 } from "./model-routes";
 import {
+  ensureConfiguredModelRow,
   mergeModelWindowRows,
   modelWindowRowsFromProfile,
   modelWindowRowsValidationError,
@@ -6375,7 +6376,13 @@ function RelayProfileDetail({
 }) {
   const [draft, setDraft] = useState<RelayProfile>(profile);
   const [modelWindowRows, setModelWindowRows] = useState<ModelWindowRow[]>(
-    modelWindowRowsFromProfile(profile.modelList, profile.modelWindows || "", profile.modelVlm, profile.modelAutoCompact),
+    modelWindowRowsFromProfile(
+      profile.modelList,
+      profile.modelWindows || "",
+      profile.modelVlm,
+      profile.modelAutoCompact,
+      profile.model,
+    ),
   );
   const [doctorResult, setDoctorResult] = useState<ProviderDoctorResult | null>(null);
   const [doctorOpen, setDoctorOpen] = useState(false);
@@ -6418,11 +6425,17 @@ function RelayProfileDetail({
     const switchedProfile = lastDetailProfileIdRef.current !== profile.id;
     lastDetailProfileIdRef.current = profile.id;
     if (switchedProfile || !unsavedRowEditsRef.current) {
-      setModelWindowRows(modelWindowRowsFromProfile(nextDraft.modelList, nextDraft.modelWindows || "", nextDraft.modelVlm, nextDraft.modelAutoCompact));
+      setModelWindowRows(modelWindowRowsFromProfile(
+        nextDraft.modelList,
+        nextDraft.modelWindows || "",
+        nextDraft.modelVlm,
+        nextDraft.modelAutoCompact,
+        nextDraft.model,
+      ));
     }
     // 依赖里刻意不放 profile.modelMetadata / 原始 relayFiles：元数据改动是本编辑器自己触发的
     // （删行会清该模型元数据），把它当依赖会让「删行 → 清元数据 → 重建行」把删掉的行加回来。
-  }, [profile.id, profile.modelList, profile.modelWindows, profile.modelAutoCompact, profile.modelVlm, profileUsesLiveFiles, isActive, isNew, liveConfigContents, liveAuthContents]);
+  }, [profile.id, profile.model, profile.modelList, profile.modelWindows, profile.modelAutoCompact, profile.modelVlm, profileUsesLiveFiles, isActive, isNew, liveConfigContents, liveAuthContents]);
   const validationSettings = relaySettingsWithDraft(form, profile.id, draft, isNew);
   const validationError = relaySessionProviderValidation(draft)
     ?? (isAggregateRelayProfile(draft)
@@ -6431,7 +6444,10 @@ function RelayProfileDetail({
   const modelRowsError = modelWindowRowsValidationMessage(modelWindowRowsValidationError(modelWindowRows));
   const customHeadersError = relayHeadersValidationMessage(profile.customHeaders || []);
   const draftWithModelRows = () => {
-    const serializedRows = serializeModelWindowRows(modelWindowRows);
+    // 保存时再兜底一次：避免行编辑守卫拦下外部同步时，配置模型被漏出 model_list。
+    const serializedRows = serializeModelWindowRows(
+      ensureConfiguredModelRow(modelWindowRows, draft.model || profile.model),
+    );
     const validSlugs = serializedRows.modelList.split("\n").map((slug) => slug.trim()).filter(Boolean);
     return {
       ...draft,
@@ -6753,6 +6769,33 @@ function RelayProfileEditor({
   const [builtinQueryState, setBuiltinQueryState] = useState<BuiltinMetadataQueryState | null>(null);
   const [importPrefillSource, setImportPrefillSource] = useState<"builtin" | "existing" | null>(null);
   const [builtinIndex, setBuiltinIndex] = useState<Map<string, BuiltinMetadataIndexEntry>>(new Map());
+  // 「配置模型」只能从模型列表中选择；选项统一用去掉窗口后缀的规范 slug，
+  // 与实际发给 Codex 的 model 字段保持一致。
+  const configuredModelValue = useMemo(() => {
+    const raw = String(profile.model || "").trim();
+    return raw ? modelSlugFromRowName(raw) || raw : "";
+  }, [profile.model]);
+  const configuredModelOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: AppSelectOption<string>[] = [];
+    modelWindowRows.forEach((row) => {
+      const raw = row.model.trim();
+      if (!raw) return;
+      const slug = modelSlugFromRowName(raw) || raw;
+      if (seen.has(slug)) return;
+      seen.add(slug);
+      options.push({ value: slug, label: slug });
+    });
+    // 历史设置里配置模型可能暂时不在 model_list：仍然给它一个可回显的选项，
+    // 保存时会由 ensureConfiguredModelRow 正式补进列表。
+    if (configuredModelValue && !seen.has(configuredModelValue)) {
+      options.unshift({ value: configuredModelValue, label: configuredModelValue });
+    }
+    if (!configuredModelValue && options.length) {
+      options.unshift({ value: "", label: t("请选择模型"), disabled: true });
+    }
+    return options;
+  }, [configuredModelValue, modelWindowRows]);
   const modelSensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
@@ -7186,7 +7229,7 @@ function RelayProfileEditor({
     if (removedSlug && configuredSlug && removedSlug === configuredSlug) {
       void actions.showMessage(
         t("配置模型不能从列表里删除"),
-        tf("「{0}」是当前「配置模型」：Codex 会始终把它发布在模型列表里，删掉保存后也会被加回来。要减少模型，请先把上方「配置模型」改成要保留的那个，再删这一行。", [removedSlug]),
+        tf("「{0}」是当前「配置模型」：Codex 会始终把它发布在模型列表里，删掉保存后也会被加回来。要减少模型，请先把下方「配置模型」改成要保留的那个，再删这一行。", [removedSlug]),
       );
       return;
     }
@@ -7323,16 +7366,6 @@ function RelayProfileEditor({
           title={t("模型配置")}
         >
           <div className="relay-options-grid">
-            <Field className="relay-field-config-model" label={t("配置模型")}>
-              <Input
-                value={profile.model}
-                onChange={(event) => updateDraft({ model: event.currentTarget.value })}
-                placeholder={t("例如 deepseek-v4-pro")}
-              />
-              <p className="field-hint">
-                {t("默认启动 Codex 时使用的模型名，请勿带后缀；上下文窗口请在下方「模型列表」中按模型单独配置。")}
-              </p>
-            </Field>
             {/* 官方登录 profile 同样维护模型列表：按模型聚合与官方模型目录拉取都依赖它。 */}
             <section className="relay-config-section relay-field-model-list">
                 <div className="relay-config-section-head">
@@ -7390,7 +7423,7 @@ function RelayProfileEditor({
                     </Button>
                     <Button
                       disabled={!modelWindowRows.some((row) => row.model.trim())}
-                      onClick={() => setModelWindowRows([])}
+                      onClick={() => setModelWindowRows(ensureConfiguredModelRow([], profile.model))}
                       size="sm"
                       title={t("清空模型")}
                       type="button"
@@ -7742,6 +7775,22 @@ function RelayProfileEditor({
                   {" "}{t("需要自定义 Fast 白名单时，打开对应模型的配置按钮，设置 Fast（priority）支持并保存此模型与供应商。")}
                 </p>
             </section>
+            <Field className="relay-field-config-model" label={t("配置模型")}>
+              <AppSelect
+                ariaLabel={t("配置模型")}
+                disabled={!configuredModelOptions.some((option) => !option.disabled)}
+                onChange={(model) => {
+                  updateDraft({ model });
+                  setModelWindowRows(ensureConfiguredModelRow(modelWindowRows, model));
+                }}
+                options={configuredModelOptions}
+                title={t("从上方「模型列表」中选择，Codex 启动时默认使用该模型。")}
+                value={configuredModelValue}
+              />
+              <p className="field-hint">
+                {t("从上方「模型列表」中选择，Codex 启动时默认使用该模型。")}
+              </p>
+            </Field>
             {showApiFields ? (
               <section className="relay-config-section relay-field-model-routes">
                 <div className="relay-config-section-head">

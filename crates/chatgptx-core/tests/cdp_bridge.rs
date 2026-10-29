@@ -3700,19 +3700,19 @@ fn injection_script_applies_fast_service_tier_contract() {
     assert_eq!(cases["lateCatalogIgnored"], "failed");
     assert_eq!(
         cases["pureApiFilteredModels"],
-        json!(["gpt-5.6-sol", "relay-model"])
+        json!(["relay-model", "gpt-5.6-sol"])
     );
     assert_eq!(
         cases["pureApiFilteredNames"],
-        json!(["gpt-5.6-sol", "relay-model"])
+        json!(["relay-model", "gpt-5.6-sol"])
     );
     assert_eq!(
         cases["pureApiFilteredSet"],
-        json!(["gpt-5.6-sol", "relay-model"])
+        json!(["relay-model", "gpt-5.6-sol"])
     );
     assert_eq!(
         cases["pureApiStatsigFiltered"],
-        json!(["gpt-5.6-sol", "relay-model"])
+        json!(["relay-model", "gpt-5.6-sol"])
     );
     assert_eq!(
         cases["unfilteredModelScenarios"],

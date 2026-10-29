@@ -268,6 +268,7 @@ export function autoFillModelWindowRows<T extends ModelWindowRowLike>(
 export type ProfileLike = {
   id: string;
   name: string;
+  model?: string;
   modelList: string;
   modelWindows: string;
   modelVlm?: string;
@@ -289,6 +290,7 @@ export function autoFillAllProfilesContextWindows<T extends ProfileLike>(
       profile.modelWindows,
       profile.modelVlm,
       profile.modelAutoCompact,
+      profile.model,
     );
     if (rows.length === 0) return profile;
 

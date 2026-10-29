@@ -165,6 +165,7 @@ export function modelWindowRowsFromProfile(
   modelWindows: string,
   modelVlm?: string,
   modelAutoCompact?: string,
+  configuredModel?: string,
 ): ModelWindowRow[] {
   let map: Record<string, string> = {};
   try {
@@ -214,7 +215,35 @@ export function modelWindowRowsFromProfile(
       };
     });
   // 没有模型就返回空列表：编辑器不显示空行，用户用「添加模型」显式加行。
-  return rows;
+  return ensureConfiguredModelRow(rows, configuredModel);
+}
+
+/// 「配置模型」是 Codex 的启动默认模型，必须同时出现在模型列表里。
+///
+/// 应用后端会在写 live config 时把它合并进 model_list，但管理端编辑器此前只读
+/// 已保存的 model_list：用户在「配置模型」里新填/改成一个列表里没有的模型时，
+/// 行编辑器里就看不到它。这里统一补齐，保存时也会随行一起写回设置。
+export function ensureConfiguredModelRow(
+  rows: ModelWindowRow[],
+  configuredModel?: string,
+): ModelWindowRow[] {
+  const model = (configuredModel || "").trim();
+  if (!model) return rows;
+  const key = modelMapKeyFromRowName(model) || model;
+  const present = rows.some((row) => {
+    const rowModel = row.model.trim();
+    return rowModel === model || (modelMapKeyFromRowName(rowModel) || rowModel) === key;
+  });
+  if (present) return rows;
+  return [
+    ...rows,
+    {
+      model,
+      window: "",
+      autoCompact: DEFAULT_AUTO_COMPACT_PERCENT,
+      imageHandling: "send-as-is",
+    },
+  ];
 }
 
 export function serializeModelWindowRows(rows: ModelWindowRow[]): {

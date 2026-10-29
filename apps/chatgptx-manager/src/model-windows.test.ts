@@ -146,6 +146,30 @@ describe("model-windows helpers", () => {
     assert.deepStrictEqual(modelWindowRowsFromProfile("  \n \n", "{}", "{}", "{}"), []);
   });
 
+  it("配置模型不在列表时自动补到末尾，并按规范 slug 去重", () => {
+    const appended = modelWindowRowsFromProfile(
+      "a\nb",
+      "{}",
+      "{}",
+      "{}",
+      "mp/raccoon/sn-deepseek-v4-1-flash-1017",
+    );
+    assert.deepStrictEqual(appended.map((row) => row.model), [
+      "a",
+      "b",
+      "mp/raccoon/sn-deepseek-v4-1-flash-1017",
+    ]);
+    assert.equal(appended[2].autoCompact, "90%");
+
+    const deduped = modelWindowRowsFromProfile("a[1M]\nb", "{}", "{}", "{}", "a");
+    assert.deepStrictEqual(deduped.map((row) => row.model), ["a[1M]", "b"]);
+
+    assert.deepStrictEqual(
+      modelWindowRowsFromProfile("", "{}", "{}", "{}", "only").map((row) => row.model),
+      ["only"],
+    );
+  });
+
   it("serializeModelWindowRows 从行控件生成 modelList、modelWindows 和 modelVlm", () => {
     assert.deepStrictEqual(
       serializeModelWindowRows([

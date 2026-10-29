@@ -1144,8 +1144,8 @@ export const EN_PLAIN: Record<string, string> = {
   "先选择聚合类型（模型聚合 / 故障转移）再保存。": "Choose the aggregation type (model aggregation / failover) before saving.",
   "默认供应商：{0}。不带 cpx- 前缀的请求（旧会话、自动压缩带的模型名等）会原样交给它；带 cpx- 前缀但解析不出来的 ID 一律报错，不回落。":
     "Default provider: {0}. Requests without the cpx- prefix (old sessions, auto-compaction model names, ...) go to it verbatim; cpx- prefixed IDs that cannot be resolved are rejected instead of falling back.",
-  "「{0}」是当前「配置模型」：Codex 会始终把它发布在模型列表里，删掉保存后也会被加回来。要减少模型，请先把上方「配置模型」改成要保留的那个，再删这一行。":
-    "\"{0}\" is the configured model: Codex always publishes it in the model list, so removing it only brings it back on save. To drop models, change the configured model above to the one you keep, then delete this row.",
+  "「{0}」是当前「配置模型」：Codex 会始终把它发布在模型列表里，删掉保存后也会被加回来。要减少模型，请先把下方「配置模型」改成要保留的那个，再删这一行。":
+    "\"{0}\" is the configured model: Codex always publishes it in the model list, so removing it only brings it back on save. To drop models, change the configured model below to the one you keep, then delete this row.",
   "未设置（未匹配到成员的请求会报错）": "Not set (requests matching no member will error)",
   "副本版本": "Copy version",
   "模型固定绑定 · {0} 个成员": "Models stay bound · {0} members",
@@ -1289,8 +1289,10 @@ export const EN_PLAIN: Record<string, string> = {
   "项目地址": "Project URL",
   "额外参数": "Extra arguments",
   "默认中转": "Default relay",
-  "默认启动 Codex 时使用的模型名，请勿带后缀；上下文窗口请在下方「模型列表」中按模型单独配置。":
-    "The model name used by default when launching Codex; don't include a suffix. Configure context windows per model in the “Model list” below.",
+  "配置模型": "Configured model",
+  "请选择模型": "Select a model",
+  "从上方「模型列表」中选择，Codex 启动时默认使用该模型。":
+    "Select from the “Model list” above; Codex uses this model by default at launch.",
   "（": " (",
   "）": ")",
   "，可以从通用配置文件或这里新增。": "; you can add them from the common config file or here.",

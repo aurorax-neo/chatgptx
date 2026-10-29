@@ -10344,6 +10344,44 @@
     return Array.isArray(value) && value.every((item) => typeof item === "string");
   }
 
+  function modelItemName(item) {
+    if (typeof item === "string") return item;
+    return item && typeof item === "object" && typeof item.model === "string" ? item.model : "";
+  }
+
+  /// ChatGPTX 模型列表顺序是纯 API 模式下的权威顺序。
+  /// `chatgptxModelNames()` 为了默认选中会把当前模型提到前面，这里只取目录
+  /// `models` 的原始顺序；目录缺失的模型再按名称清单补到末尾。
+  function chatgptxCatalogOrderedModelNames() {
+    return uniqueValues([
+      ...(Array.isArray(codexModelCatalog.models) ? codexModelCatalog.models : []),
+      ...chatgptxModelNames(),
+    ]);
+  }
+
+  /// 原生 app-server 会保留旧缓存顺序，后加入的模型只能追加到末尾，导致 Codex
+  /// 选择器与 ChatGPTX「模型列表」顺序不一致。纯 API 目录是权威快照，命中时整组
+  /// 按目录顺序重排；出现目录外模型时保持原顺序，避免误动官方模型。
+  function reorderModelCollectionByCatalog(models) {
+    const order = chatgptxCatalogOrderedModelNames();
+    if (order.length < 2) return false;
+    const rank = new Map(order.map((name, index) => [name, index]));
+    const ranked = models.map((item, index) => ({ item, index, rank: rank.get(modelItemName(item)) }));
+    if (ranked.some((entry) => entry.rank === undefined)) return false;
+    const sorted = [...ranked].sort((left, right) => left.rank - right.rank);
+    if (sorted.every((entry, index) => entry.index === index)) return false;
+    models.splice(0, models.length, ...sorted.map((entry) => entry.item));
+    return true;
+  }
+
+  function reorderModelSetByCatalog(models) {
+    const items = [...models];
+    if (!reorderModelCollectionByCatalog(items)) return false;
+    models.clear();
+    items.forEach((item) => models.add(item));
+    return true;
+  }
+
   function patchModelNameArray(models, hostId) {
     if (!stringArrayLooksPatchable(models)) return false;
     const allowed = codexPureApiAllowedModelSet(hostId);
@@ -10363,6 +10401,7 @@
         changed = true;
       }
     });
+    if (allowed && reorderModelCollectionByCatalog(models)) changed = true;
     finishModelCollection(models);
     return changed;
   }
@@ -10492,6 +10531,7 @@
         changed = true;
       }
     });
+    if (allowed && reorderModelCollectionByCatalog(models)) changed = true;
     finishModelCollection(models);
     return changed;
   }
@@ -10522,6 +10562,7 @@
           changed = true;
         }
       });
+      if (allowed && reorderModelSetByCatalog(value.availableModels)) changed = true;
       finishModelCollection(value.availableModels);
     }
     if (value.available_models instanceof Set) {
@@ -10535,6 +10576,7 @@
           changed = true;
         }
       });
+      if (allowed && reorderModelSetByCatalog(value.available_models)) changed = true;
       finishModelCollection(value.available_models);
     }
     if (Array.isArray(value.availableModels)) {
