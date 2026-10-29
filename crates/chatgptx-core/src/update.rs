@@ -357,6 +357,39 @@ pub fn safe_asset_name(name: &str) -> anyhow::Result<String> {
     Ok(file_name.to_string())
 }
 
+/// 清理应用内更新下载目录里的安装包。
+///
+/// macOS 安装 helper 会在替换完成后立即删除 DMG；这里作为启动兜底，
+/// 覆盖 Windows 安装器、旧版本残留以及中途失败留下的文件。只删除普通文件，
+/// 不跟随符号链接，也不碰同目录下的非安装包文件。
+pub fn cleanup_downloaded_installers(download_dir: &Path) -> usize {
+    let Ok(entries) = std::fs::read_dir(download_dir) else {
+        return 0;
+    };
+    let mut removed = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if !metadata.file_type().is_file() {
+            continue;
+        }
+        let extension = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if !matches!(extension.as_str(), "dmg" | "msi" | "exe") {
+            continue;
+        }
+        if std::fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 fn platform_asset_rank(name: &str) -> u8 {
     // 0 = exact match (current OS + native arch)
     // 1 = same OS, other arch (acceptable fallback, e.g. x86_64 on arm64 or vice versa)

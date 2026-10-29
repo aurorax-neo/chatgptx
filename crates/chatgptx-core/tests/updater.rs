@@ -1,6 +1,6 @@
 use chatgptx_core::update::{
-    Release, download_asset_to, is_newer_version, parse_version_tag, release_from_github_payload,
-    release_from_latest_json_payload, safe_asset_name, select_update_asset,
+    Release, cleanup_downloaded_installers, download_asset_to, is_newer_version, parse_version_tag,
+    release_from_github_payload, release_from_latest_json_payload, safe_asset_name, select_update_asset,
 };
 use serde_json::json;
 
@@ -216,4 +216,21 @@ fn download_asset_to_writes_bytes() {
 
     assert_eq!(path, dir.path().join("pkg.zip"));
     assert_eq!(std::fs::read(path).unwrap(), b"abcdef");
+}
+
+#[test]
+fn cleanup_removes_only_downloaded_installers() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("ChatGPTX-1.0.0.dmg"), b"dmg").unwrap();
+    std::fs::write(dir.path().join("ChatGPTX-1.0.0-setup.EXE"), b"exe").unwrap();
+    std::fs::write(dir.path().join("ChatGPTX-1.0.0.msi"), b"msi").unwrap();
+    std::fs::write(dir.path().join("notes.txt"), b"keep").unwrap();
+    std::fs::create_dir(dir.path().join("nested.dmg")).unwrap();
+
+    assert_eq!(cleanup_downloaded_installers(dir.path()), 3);
+    assert!(!dir.path().join("ChatGPTX-1.0.0.dmg").exists());
+    assert!(!dir.path().join("ChatGPTX-1.0.0-setup.EXE").exists());
+    assert!(!dir.path().join("ChatGPTX-1.0.0.msi").exists());
+    assert!(dir.path().join("notes.txt").exists());
+    assert!(dir.path().join("nested.dmg").is_dir());
 }

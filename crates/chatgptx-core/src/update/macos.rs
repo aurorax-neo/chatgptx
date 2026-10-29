@@ -560,6 +560,25 @@ mod runtime {
     fn open_bundle(path: &Path) -> anyhow::Result<()> {
         checked("/usr/bin/open", &[path.as_os_str()]).map(|_| ())
     }
+    pub(super) fn cleanup_install_artifacts(plan: &UpdatePlan) {
+        match fs::remove_file(&plan.installer) {
+            Ok(()) => {
+                let _ = crate::diagnostic_log::append_diagnostic_log(
+                    "update.macos.installer_removed",
+                    serde_json::json!({ "installer": plan.installer }),
+                );
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                let _ = crate::diagnostic_log::append_diagnostic_log(
+                    "update.macos.installer_cleanup_failed",
+                    serde_json::json!({ "installer": plan.installer, "error": error.to_string() }),
+                );
+            }
+        }
+        // DMG 已 detach，mount 目录此时应为空；清掉它避免事务目录残留挂载壳。
+        let _ = fs::remove_dir(plan.transaction.join("mount"));
+    }
     fn validate_plan(path: &Path) -> anyhow::Result<UpdatePlan> {
         let meta = fs::symlink_metadata(path)?;
         if !meta.is_file() || meta.mode() & 0o077 != 0 || meta.len() > 64 * 1024 {
@@ -747,6 +766,7 @@ mod runtime {
             approved = true;
             wait_manager(&plan)?;
             replace_bundles(&NativeOps, &plan)?;
+            cleanup_install_artifacts(&plan);
             Ok(())
         })();
         match result {
@@ -1078,6 +1098,38 @@ pub fn run_update_helper(path: &Path) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn cleanup_removes_installer_and_empty_mount_after_update() {
+        let temp = tempfile::tempdir().unwrap();
+        let transaction = temp.path().join(".chatgptx-update-test");
+        let mount = transaction.join("mount");
+        fs::create_dir_all(&mount).unwrap();
+        let installer = temp.path().join("ChatGPTX-1.0.0.dmg");
+        fs::write(&installer, b"dmg").unwrap();
+        let plan = UpdatePlan {
+            schema: 2,
+            install_root: temp.path().to_path_buf(),
+            transaction,
+            installer: installer.clone(),
+            version: "1.0.0".to_string(),
+            manager_pid: 1,
+            old_bundles: [BundleInfo {
+                name: "ChatGPTX".to_string(),
+                unified: true,
+                id: "com.chatgptx.app".to_string(),
+                executable: "ChatGPTX".to_string(),
+                version: "0.9.0".to_string(),
+                team: None,
+            }],
+        };
+
+        runtime::cleanup_install_artifacts(&plan);
+
+        assert!(!installer.exists());
+        assert!(!mount.exists());
+    }
 
     struct FixtureOps {
         reject_signature: bool,

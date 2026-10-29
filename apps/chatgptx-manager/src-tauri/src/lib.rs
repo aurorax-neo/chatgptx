@@ -33,6 +33,18 @@ pub fn run() {
     let Some(_guard) = acquire_single_instance_guard() else {
         return;
     };
+    let update_download_dir = chatgptx_core::paths::default_app_state_dir().join("updates");
+    let removed_installers =
+        chatgptx_core::update::cleanup_downloaded_installers(&update_download_dir);
+    if removed_installers > 0 {
+        let _ = chatgptx_core::diagnostic_log::append_diagnostic_log(
+            "manager.update_installers_cleaned",
+            serde_json::json!({
+                "directory": update_download_dir,
+                "count": removed_installers
+            }),
+        );
+    }
     #[cfg(target_os = "macos")]
     if let Some(root) = chatgptx_core::install::default_install_root() {
         match chatgptx_core::install::macos::migrate_legacy_manager_bundle(&root) {
