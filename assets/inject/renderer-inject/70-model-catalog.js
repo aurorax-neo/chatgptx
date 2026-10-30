@@ -120,9 +120,9 @@
 
   function chatgptxModelNames() {
     return uniqueValues([
+      ...(Array.isArray(codexModelCatalog.models) ? codexModelCatalog.models : []),
       codexModelCatalog.default_model,
       codexModelCatalog.model,
-      ...(Array.isArray(codexModelCatalog.models) ? codexModelCatalog.models : []),
     ]);
   }
 

@@ -147,9 +147,8 @@ pub fn collect_catalog_entries(
         });
     }
 
-    // 处理当前 model，放到最前面。
+    // 若当前 model 不在 model_list 中，则追加到末尾，绝不改变既有列表顺序。
     let current_model = current_model.trim();
-    let mut entries = Vec::new();
     if !current_model.is_empty() {
         let (slug, suffix_window) = parse_model_suffix(current_model);
         if !slug.is_empty() {
@@ -161,19 +160,25 @@ pub fn collect_catalog_entries(
             let auto_compact_percent = model_auto_compact
                 .get(&slug)
                 .and_then(|token| parse_compact_percent(token));
-            entries.push(ModelCatalogEntry {
-                display_name: slug.clone(),
-                slug: slug.clone(),
-                suffix_window,
-                auto_compact_percent,
-            });
-            // 从 list_entries 中移除同 slug 条目，避免重复。
-            list_entries.retain(|entry| entry.slug != slug);
+            if let Some(existing) = list_entries.iter_mut().find(|entry| entry.slug == slug) {
+                if existing.suffix_window.is_none() {
+                    existing.suffix_window = suffix_window;
+                }
+                if existing.auto_compact_percent.is_none() {
+                    existing.auto_compact_percent = auto_compact_percent;
+                }
+            } else {
+                list_entries.push(ModelCatalogEntry {
+                    display_name: slug.clone(),
+                    slug,
+                    suffix_window,
+                    auto_compact_percent,
+                });
+            }
         }
     }
 
-    entries.append(&mut list_entries);
-    entries
+    list_entries
 }
 
 /// 内置 codex bundled catalog 模板（assets/codex-models.json），用于 clone entry

@@ -121,7 +121,11 @@ fn relay_profile_model_catalog_value(home: &Path, profile: &RelayProfile) -> Val
     let models = relay_profile_model_ids(profile);
     let model = profile.model.trim().to_string();
     let codex_model_provider = codex_model_provider_for_relay_profile(home, profile);
-    let default_model = models.first().cloned().unwrap_or_default();
+    let default_model = if !model.is_empty() {
+        model.clone()
+    } else {
+        models.first().cloned().unwrap_or_default()
+    };
     let provider_name = if profile.name.trim().is_empty() {
         profile.id.trim()
     } else {

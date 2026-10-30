@@ -6267,6 +6267,27 @@ experimental_bearer_token = "sk-new"
 }
 
 #[test]
+fn normalize_preserves_model_list_order_when_configured_model_is_in_list() {
+    let mut profile = RelayProfile {
+        id: "test-order".to_string(),
+        relay_mode: RelayMode::PureApi,
+        model: "model-b".to_string(),
+        model_list: "model-a\nmodel-b\nmodel-c".to_string(),
+        config_contents: r#"model = "model-b"
+base_url = "https://relay.example/v1"
+[model_providers.custom]
+base_url = "https://relay.example/v1"
+"#
+        .to_string(),
+        ..RelayProfile::default()
+    };
+
+    normalize_relay_profile_for_storage(&mut profile).unwrap();
+
+    assert_eq!(profile.model_list, "model-a\nmodel-b\nmodel-c");
+}
+
+#[test]
 fn apply_model_auto_compact_generates_explicit_threshold_without_changing_fallback_behavior() {
     let temp = tempfile::tempdir().unwrap();
     let profile = RelayProfile {

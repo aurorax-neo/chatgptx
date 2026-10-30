@@ -4904,14 +4904,20 @@ fn merge_model_into_model_list(model: &str, model_list: &str) -> String {
     // 入参可能来自 official 分支的原始 profile.model 字段（未经 relay_profile_model
     // 出口过滤），污染值并入列表后会在 normalize 逐轮转义放大（issue #1097 问题 2）。
     let model = sanitize_relay_model_name(model).unwrap_or_default();
+    let (model_slug, _) = crate::model_suffix::parse_model_suffix(&model);
     let mut models = Vec::new();
-    if !model.is_empty() {
-        models.push(model.to_string());
-    }
+    let mut seen = HashSet::new();
     for item in model_list.split(['\r', '\n', ',']).map(str::trim) {
-        if !item.is_empty() && !models.iter().any(|existing| existing == item) {
+        if item.is_empty() {
+            continue;
+        }
+        let (slug, _) = crate::model_suffix::parse_model_suffix(item);
+        if seen.insert(slug) {
             models.push(item.to_string());
         }
+    }
+    if !model.is_empty() && !model_slug.is_empty() && seen.insert(model_slug) {
+        models.push(model.to_string());
     }
     models.join("\n")
 }

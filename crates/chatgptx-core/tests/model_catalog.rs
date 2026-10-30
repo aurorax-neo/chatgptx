@@ -252,8 +252,8 @@ async fn model_catalog_uses_active_relay_profile_model_list_and_actual_provider(
     assert_eq!(
         result["models"],
         json!([
-            "qwen3-coder",
             "deepseek-coder",
+            "qwen3-coder",
             "claude-compatible",
             "gpt-5.6-sol"
         ])

@@ -434,7 +434,7 @@ fn gpt61_sol_metadata_exposes_max_ultra_fast_and_272k_default() {
 
 #[test]
 fn collect_entries_adopts_suffix_for_current_model_from_list() {
-    // 当前 model 本身无后缀，但 model_list 中靠后位置有同名带后缀条目。
+    // 当前 model 本身无后缀，但 model_list 中靠后位置有同名带后缀条目；保留原有顺序。
     let mut windows = HashMap::new();
     windows.insert("deepseek-v4-pro".to_string(), "1M".to_string());
     let entries = collect_catalog_entries(
@@ -444,8 +444,24 @@ fn collect_entries_adopts_suffix_for_current_model_from_list() {
         "deepseek-v4-pro",
     );
     assert_eq!(entries.len(), 2);
-    assert_eq!(entries[0].slug, "deepseek-v4-pro");
-    assert_eq!(entries[0].suffix_window, Some(1_000_000));
+    assert_eq!(entries[0].slug, "qwen3-coder");
+    assert_eq!(entries[0].suffix_window, None);
+    assert_eq!(entries[1].slug, "deepseek-v4-pro");
+    assert_eq!(entries[1].suffix_window, Some(1_000_000));
+}
+
+#[test]
+fn collect_entries_preserves_model_list_order_when_current_model_selected() {
+    let entries = collect_catalog_entries(
+        "model-a\nmodel-b\nmodel-c",
+        &HashMap::new(),
+        &HashMap::new(),
+        "model-b",
+    );
+    assert_eq!(
+        entries.into_iter().map(|e| e.slug).collect::<Vec<_>>(),
+        vec!["model-a", "model-b", "model-c"]
+    );
 }
 
 #[test]
