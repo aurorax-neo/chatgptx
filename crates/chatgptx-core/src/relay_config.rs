@@ -4916,8 +4916,8 @@ fn merge_model_into_model_list(model: &str, model_list: &str) -> String {
             models.push(item.to_string());
         }
     }
-    if !model.is_empty() && !model_slug.is_empty() && seen.insert(model_slug) {
-        models.push(model.to_string());
+    if !model_slug.is_empty() && seen.insert(model_slug) {
+        models.push(model);
     }
     models.join("\n")
 }

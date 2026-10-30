@@ -67,6 +67,38 @@ test("配置模型只补到目录末尾，不抢到列表第一位", () => {
   assert.deepEqual(runtime.chatgptxCatalogOrderedModelNames(), ["a", "c", "default"]);
 });
 
+test("chatgptxModelNames 保留 codexModelCatalog.models 既有顺序且不将选中模型提前", () => {
+  const source = fragment("70-model-catalog.js");
+  const start = source.indexOf("  function chatgptxModelNames(");
+  const end = source.indexOf("\n  async function loadCodexModelCatalog(", start);
+  assert.ok(start >= 0 && end > start, "必须存在 chatgptxModelNames 定义");
+  const body = source.slice(start, end);
+  const factory = new Function(
+    "uniqueValues",
+    "codexModelCatalog",
+    `${body}\nreturn chatgptxModelNames();`,
+  );
+  const uniqueValues = (values: unknown[]) => Array.from(new Set(values.filter(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  )));
+
+  // 选中的模型已在列表中间，保留既有顺序不置顶
+  const preserved = factory(uniqueValues, {
+    models: ["model-a", "model-b", "model-c"],
+    default_model: "model-b",
+    model: "model-b",
+  });
+  assert.deepEqual(preserved, ["model-a", "model-b", "model-c"]);
+
+  // 选中的模型不在列表中，追加到末尾
+  const appended = factory(uniqueValues, {
+    models: ["model-a", "model-b"],
+    default_model: "model-c",
+    model: "model-c",
+  });
+  assert.deepEqual(appended, ["model-a", "model-b", "model-c"]);
+});
+
 test("对象数组和字符串数组两条补丁路径都接入了顺序同步", () => {
   const source = fragment("70-model-catalog.js");
   const calls = source.match(/if \(allowed && reorderModelCollectionByCatalog\(models\)\) changed = true;/g) ?? [];

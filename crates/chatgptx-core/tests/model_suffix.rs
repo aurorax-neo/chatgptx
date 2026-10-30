@@ -465,6 +465,25 @@ fn collect_entries_preserves_model_list_order_when_current_model_selected() {
 }
 
 #[test]
+fn collect_entries_does_not_override_existing_list_window_when_current_model_declares_window() {
+    let mut windows = HashMap::new();
+    windows.insert("deepseek-v4-pro".to_string(), "1M".to_string());
+    let mut compact = HashMap::new();
+    compact.insert("deepseek-v4-pro".to_string(), "85".to_string());
+    let entries = collect_catalog_entries(
+        "deepseek-v4-pro",
+        &windows,
+        &compact,
+        "deepseek-v4-pro[2M]",
+    );
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].slug, "deepseek-v4-pro");
+    // 列表中已有的 1M 窗口和 85% 压缩不被 current_model 自带的 [2M] 覆盖
+    assert_eq!(entries[0].suffix_window, Some(1_000_000));
+    assert_eq!(entries[0].auto_compact_percent, Some(85_000_000));
+}
+
+#[test]
 fn collect_entries_prefers_later_suffix_for_duplicate_slug() {
     // 同一 slug 先出现无后缀条目，后出现带后缀条目，应采纳后者窗口。
     let mut windows = HashMap::new();

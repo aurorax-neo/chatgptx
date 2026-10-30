@@ -119,7 +119,12 @@ pub async fn read_codex_model_catalog() -> Value {
 
 fn relay_profile_model_catalog_value(home: &Path, profile: &RelayProfile) -> Value {
     let models = relay_profile_model_ids(profile);
-    let model = profile.model.trim().to_string();
+    let (model_slug, _) = crate::model_suffix::parse_model_suffix(&profile.model);
+    let model = if !model_slug.is_empty() {
+        model_slug
+    } else {
+        profile.model.trim().to_string()
+    };
     let codex_model_provider = codex_model_provider_for_relay_profile(home, profile);
     let default_model = if !model.is_empty() {
         model.clone()
@@ -174,16 +179,22 @@ pub fn codex_model_provider_for_relay_profile(home: &Path, profile: &RelayProfil
 }
 
 fn relay_profile_model_ids(profile: &RelayProfile) -> Vec<String> {
-    unique_strings(
-        profile
-            .model_list
-            .split(['\r', '\n', ','])
-            .chain(std::iter::once(profile.model.as_str()))
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToString::to_string)
-            .collect(),
-    )
+    let mut seen = HashSet::new();
+    let mut models = Vec::new();
+    for raw in profile
+        .model_list
+        .split(['\r', '\n', ','])
+        .chain(std::iter::once(profile.model.as_str()))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let (slug, _) = crate::model_suffix::parse_model_suffix(raw);
+        let id = if !slug.is_empty() { slug } else { raw.to_string() };
+        if seen.insert(id.clone()) {
+            models.push(id);
+        }
+    }
+    models
 }
 
 /// 当前活动供应商在 Codex 模型列表里公布的模型 ID 集合，用于清理历史残留引用
@@ -1397,6 +1408,37 @@ mod model_fetch_tests {
             business_error_message(&payload).as_deref(),
             Some("令牌已过期或验证不正确")
         );
+    }
+
+    #[test]
+    fn relay_profile_model_catalog_deduplicates_by_slug_and_strips_suffixes() {
+        let profile = RelayProfile {
+            model: "gpt-5".into(),
+            model_list: "gpt-5[200K]\nclaude-3-opus\ngpt-5\nclaude-3-opus[1M]".into(),
+            ..RelayProfile::default()
+        };
+        let home = tempfile::tempdir().unwrap();
+        let catalog = relay_profile_model_catalog_value(home.path(), &profile);
+        assert_eq!(
+            catalog["models"],
+            json!(["gpt-5", "claude-3-opus"])
+        );
+        assert_eq!(catalog["default_model"], "gpt-5");
+        assert_eq!(catalog["model"], "gpt-5");
+    }
+
+    #[test]
+    fn relay_profile_model_catalog_appends_unlisted_suffixed_model_without_suffix() {
+        let profile = RelayProfile {
+            model: "model-c[1M]".into(),
+            model_list: "model-a\nmodel-b".into(),
+            ..RelayProfile::default()
+        };
+        let home = tempfile::tempdir().unwrap();
+        let catalog = relay_profile_model_catalog_value(home.path(), &profile);
+        assert_eq!(catalog["models"], json!(["model-a", "model-b", "model-c"]));
+        assert_eq!(catalog["default_model"], "model-c");
+        assert_eq!(catalog["model"], "model-c");
     }
 
     #[test]

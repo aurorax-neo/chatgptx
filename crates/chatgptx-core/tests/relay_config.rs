@@ -6288,6 +6288,48 @@ base_url = "https://relay.example/v1"
 }
 
 #[test]
+fn normalize_deduplicates_duplicate_slugs_in_model_list_and_keeps_first() {
+    let mut profile = RelayProfile {
+        id: "test-dedup".to_string(),
+        relay_mode: RelayMode::PureApi,
+        model: "model-a".to_string(),
+        model_list: "model-a[200K]\nmodel-b\nmodel-a[1M]\nmodel-c".to_string(),
+        config_contents: r#"model = "model-a"
+base_url = "https://relay.example/v1"
+[model_providers.custom]
+base_url = "https://relay.example/v1"
+"#
+        .to_string(),
+        ..RelayProfile::default()
+    };
+
+    normalize_relay_profile_for_storage(&mut profile).unwrap();
+
+    assert_eq!(profile.model_list, "model-a\nmodel-b\nmodel-c");
+}
+
+#[test]
+fn normalize_appends_unlisted_configured_model_to_end_of_model_list() {
+    let mut profile = RelayProfile {
+        id: "test-append".to_string(),
+        relay_mode: RelayMode::PureApi,
+        model: "model-d".to_string(),
+        model_list: "model-a\nmodel-b\nmodel-c".to_string(),
+        config_contents: r#"model = "model-d"
+base_url = "https://relay.example/v1"
+[model_providers.custom]
+base_url = "https://relay.example/v1"
+"#
+        .to_string(),
+        ..RelayProfile::default()
+    };
+
+    normalize_relay_profile_for_storage(&mut profile).unwrap();
+
+    assert_eq!(profile.model_list, "model-a\nmodel-b\nmodel-c\nmodel-d");
+}
+
+#[test]
 fn apply_model_auto_compact_generates_explicit_threshold_without_changing_fallback_behavior() {
     let temp = tempfile::tempdir().unwrap();
     let profile = RelayProfile {
