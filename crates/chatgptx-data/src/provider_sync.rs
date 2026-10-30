@@ -7263,7 +7263,7 @@ mod deleted_thread_tombstone_tests {
         .unwrap();
     }
 
-    fn create_catalog_db(path: &Path, thread_id: &str, provider: &str) {
+    fn create_catalog_db(path: &Path, thread_id: &str, _provider: &str) {
         let db = Connection::open(path).unwrap();
         db.execute(
             "CREATE TABLE IF NOT EXISTS local_thread_catalog (

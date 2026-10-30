@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use chatgptx_core::app_paths::{
     build_codex_executable, codex_app_version, derive_packaged_app_user_model_id,
     find_bundled_codex_cli, find_latest_codex_app_dir, find_latest_codex_app_dir_from_roots,
-    find_linux_codex_app, find_macos_codex_app, normalize_codex_app_path,
+    find_macos_codex_app, normalize_codex_app_path,
     resolve_codex_app_dir_with_saved, user_data_candidates_from,
 };
 use chatgptx_core::launcher::{

@@ -20,6 +20,7 @@ use crate::settings::{BackendSettings, SettingsStore, normalize_codex_extra_args
 use crate::status::{LaunchStatus, StatusStore};
 
 static PET_OVERLAY_SYNC_FAILED: AtomicBool = AtomicBool::new(false);
+#[cfg(windows)]
 static PET_CURSOR_DRIVER_FAILED: AtomicBool = AtomicBool::new(false);
 const BRIDGE_HEALTH_FAILURE_THRESHOLD: u8 = 2;
 /// 重注入退避：首次重注入立即执行，此后若桥仍不健康，重注入间隔按
@@ -898,13 +899,6 @@ fn remote_control_provider_proxy_enabled(settings: &BackendSettings) -> bool {
     profile.relay_mode == crate::settings::RelayMode::Official && profile.official_mix_api_key
 }
 
-fn active_relay_profile_is_official_mix(settings: &BackendSettings) -> bool {
-    if !settings.relay_profiles_enabled {
-        return false;
-    }
-    let profile = settings.active_relay_profile();
-    profile.relay_mode == crate::settings::RelayMode::Official && profile.official_mix_api_key
-}
 #[cfg(windows)]
 fn apply_chatgptx_window_icon_after_launch(process_id: u32) {
     let icon_resource_path =
@@ -3502,16 +3496,6 @@ async fn retry_injection(debug_port: u16, helper_port: u16) -> anyhow::Result<()
     Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Codex injection failed")))
 }
 
-async fn try_inject_isolated_quota_gate(debug_port: u16) -> anyhow::Result<()> {
-    let targets = crate::cdp::list_targets(debug_port).await?;
-    let target = crate::cdp::pick_injectable_codex_page_target(&targets)?;
-    let websocket_url = target
-        .web_socket_debugger_url
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("selected CDP target has no websocket URL"))?;
-    crate::bridge::install_isolated_api_quota_gate(websocket_url).await
-}
-
 pub async fn check_and_reinject_bridge(debug_port: u16, helper_port: u16) -> bool {
     // This one-shot entry point preserves its historical immediate-repair behavior.
     let mut health_failures = BRIDGE_HEALTH_FAILURE_THRESHOLD.saturating_sub(1);
@@ -3932,6 +3916,7 @@ async fn try_inject(debug_port: u16, helper_port: u16) -> anyhow::Result<()> {
     .await
 }
 
+#[cfg(windows)]
 async fn confirmed_pet_overlay_targets(
     debug_port: u16,
 ) -> anyhow::Result<Vec<crate::cdp::CdpTarget>> {

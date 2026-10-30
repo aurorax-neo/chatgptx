@@ -1696,7 +1696,7 @@ pub fn sync_bound_official_account_on_relay_apply(
 #[derive(Debug)]
 struct ActiveOAuthSession {
     login_id: String,
-    port: u16,
+    _port: u16,
     redirect_uri: String,
     code_verifier: String,
     state_token: String,
@@ -1837,7 +1837,7 @@ pub async fn start_official_oauth_login() -> anyhow::Result<OAuthLoginStartRespo
 
     let session = ActiveOAuthSession {
         login_id: login_id.clone(),
-        port,
+        _port: port,
         redirect_uri: redirect_uri.clone(),
         code_verifier,
         state_token,

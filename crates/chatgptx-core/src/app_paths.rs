@@ -727,8 +727,6 @@ fn chatgptx_name_path(path: &Path) -> bool {
             .unwrap_or(name)
             .to_ascii_lowercase();
         if lower == "chatgptx"
-            || lower == "chatgptx"
-            || lower == "chatgptx"
             || lower == "chatgptx manager"
             || lower.contains("chatgptx-manager")
         {

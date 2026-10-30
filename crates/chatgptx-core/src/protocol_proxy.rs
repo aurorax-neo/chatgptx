@@ -6512,6 +6512,7 @@ fn web_search_action_from_arguments(arguments: &str) -> Value {
     }
 }
 
+#[cfg(test)]
 fn web_search_action_has_target(action: &Value) -> bool {
     action
         .get("query")

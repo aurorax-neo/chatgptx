@@ -784,7 +784,6 @@ fn apply_chat_protocol_relay_points_codex_to_local_responses_proxy() {
     assert!(!updated.contains("chatgptx_chat_base_url"));
 }
 
-#[test]
 /// 回归（issue #1604）：重启/注入路径写入聚合代理配置时，
 /// 必须保留 live auth.json 里已有的官方 OAuth token，不能整体覆盖。
 #[test]
@@ -848,6 +847,7 @@ fn apply_relay_config_with_session_provider_repairs_empty_auth_json() {
     );
 }
 
+#[test]
 fn openai_session_provider_rejects_chat_completions() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -2048,7 +2048,6 @@ fn apply_relay_files_allows_empty_isolated_auth_json() {
     );
 }
 
-#[test]
 /// 回归（issue #1604）：低层 apply API 处理聚合 profile 时不能把 auth.json 写成空文件，
 /// 并且要保留 live 里已有的官方 OAuth token。
 #[test]
@@ -2139,6 +2138,7 @@ model_provider = "openai"
     );
 }
 
+#[test]
 fn lists_codex_context_entries_from_common_config() {
     let entries = list_context_entries_from_common_config(
         r#"[mcp_servers.context7]

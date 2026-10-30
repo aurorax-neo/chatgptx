@@ -2066,7 +2066,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn atomic_write_replaces_existing_file_and_removes_temp_file() {
         let dir = temp_dir();
         let path = dir.join("settings.json");
@@ -3143,7 +3142,6 @@ experimental_bearer_token = "sk-existing""#
     }
 
     #[test]
-    #[test]
     fn settings_store_update_persists_stepwise_settings() {
         let dir = temp_dir();
         let store = SettingsStore::new(dir.join("settings.json"));
@@ -3186,7 +3184,6 @@ experimental_bearer_token = "sk-existing""#
         assert_eq!(store.load().unwrap(), updated);
     }
 
-    #[test]
     #[test]
     fn legacy_launch_mode_is_ignored_without_changing_provider_modes() {
         for value in [

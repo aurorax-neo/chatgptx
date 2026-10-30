@@ -28,6 +28,7 @@ fn normalize_proxy_url(value: &str) -> Option<String> {
     Some(format!("http://{value}"))
 }
 
+#[cfg(any(windows, test))]
 fn parse_windows_proxy_server(value: &str) -> Option<String> {
     let value = value.trim();
     if value.is_empty() {

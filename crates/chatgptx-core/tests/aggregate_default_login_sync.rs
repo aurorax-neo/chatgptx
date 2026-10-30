@@ -15,7 +15,7 @@ use chatgptx_core::paths::set_settings_path_for_tests;
 use chatgptx_core::relay_config::apply_relay_profile_to_home_with_switch_rules;
 use chatgptx_core::settings::{
     AggregateRelayMember, AggregateRelayProfile, AggregateRelayStrategy, BackendSettings, RelayMode,
-    RelayProfile, RelaySessionProvider, SettingsStore,
+    RelayProfile, RelaySessionProvider,
 };
 use serde_json::{Value, json};
 
@@ -118,8 +118,6 @@ fn apply_switch(
     aggregate: AggregateRelayProfile,
     live_auth: Option<Value>,
 ) -> (tempfile::TempDir, Value) {
-    let default_member = aggregate.default_relay_id.clone();
-    let sync = aggregate.sync_default_member_login;
     let _serial = SETTINGS_GUARD
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());

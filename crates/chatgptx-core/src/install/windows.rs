@@ -2,9 +2,12 @@ use std::path::{Path, PathBuf};
 
 use super::{APP_NAME, InstallOptions, application_source, install_root_or_default};
 
+#[cfg(any(windows, test))]
 const UNINSTALL_SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\ChatGPTX";
+#[cfg(any(windows, test))]
 const LEGACY_UNINSTALL_SUBKEY: &str =
     r"Software\Microsoft\Windows\CurrentVersion\Uninstall\ChatGPTX";
+#[cfg(windows)]
 const URL_PROTOCOL_SUBKEY: &str = r"Software\Classes\chatgptx";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

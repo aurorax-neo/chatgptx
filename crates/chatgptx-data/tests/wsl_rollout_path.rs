@@ -5,7 +5,10 @@ use chatgptx_core::models::{DeleteStatus, SessionRef};
 use chatgptx_data::{BackupStore, SQLiteStorageAdapter};
 use rusqlite::Connection;
 use std::fs;
+#[cfg(windows)]
 use std::path::{Path, PathBuf};
+#[cfg(not(windows))]
+use std::path::Path;
 use tempfile::tempdir;
 
 fn session(id: &str, title: &str) -> SessionRef {
@@ -14,6 +17,7 @@ fn session(id: &str, title: &str) -> SessionRef {
 
 /// 把 Windows 路径转成 WSL 视角：C:/Users/a.jsonl -> /mnt/c/Users/a.jsonl
 /// （复刻 WSL 模式下 codex 写入 sqlite 的路径形式）
+#[cfg(windows)]
 fn wsl_view_of(path: &Path) -> String {
     let s = path.to_string_lossy().replace('\\', "/");
     let bytes = s.as_bytes();
@@ -47,6 +51,7 @@ fn thread_count(path: &Path) -> i64 {
     .unwrap()
 }
 
+#[cfg(windows)]
 fn find_backup_jsons(dir: &Path, out: &mut Vec<PathBuf>) {
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {

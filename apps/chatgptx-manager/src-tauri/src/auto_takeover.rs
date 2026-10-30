@@ -408,7 +408,7 @@ fn publish(inputs: &TakeoverInputs, decision: TakeoverDecision) {
 // ---------------------------------------------------------------- 输入采集
 
 fn collect_inputs() -> Result<TakeoverInputs, String> {
-    let mut state = with_inner(|state| {
+    let state = with_inner(|state| {
         (
             state.last_attempt,
             state.our_launch_at,
@@ -503,7 +503,7 @@ fn probe_desktop_app(app_dir: &Path) -> AppProbe {
 fn current_instance() -> Option<InstanceKey> {
     let latest = StatusStore::default().load_latest().ok().flatten();
     let app_dir = resolve_app_dir(latest.as_ref())?;
-    let port = latest
+    let _port = latest
         .as_ref()
         .and_then(|status| status.debug_port)
         .unwrap_or_else(default_debug_port);

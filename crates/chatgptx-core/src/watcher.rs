@@ -14,6 +14,7 @@ pub const TAKEOVER_FAILURE_BACKOFF_SECONDS: f64 = 30.0;
 pub const RESTART_STOP_WAIT_TIMEOUT_MS: u64 = 10_000;
 const RESTART_STOP_WAIT_INTERVAL_MS: u64 = 100;
 /// 「等旧启动器退出」轮询退避的上限。
+#[cfg(any(windows, test))]
 const LAUNCHER_WAIT_BACKOFF_MAX_MS: u64 = 1_000;
 /// 强制结束后，再等多久确认残留实例已经消失。
 const LAUNCHER_FORCE_KILL_GRACE_MS: u64 = 2_000;
@@ -1575,6 +1576,7 @@ pub fn stop_main_codex_processes_and_wait(_main_debug_port: u16) {
 ///
 /// 抽成纯函数是为了能在 macOS 上测「多开不允许退回、主实例允许退回」这条关键分支
 /// （Windows 分支本身在本机不编译）。
+#[cfg(any(windows, test))]
 fn select_stop_targets(
     port_matched: Vec<u32>,
     all_codex: impl FnOnce() -> Vec<u32>,

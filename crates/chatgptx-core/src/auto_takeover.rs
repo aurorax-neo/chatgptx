@@ -181,13 +181,6 @@ pub fn has_other_desktop_instance(
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct DesktopRuntime {
-    pid: u32,
-    /// macOS 用 `ps` 的 lstart；Windows 用进程启动时刻（秒）。
-    incarnation: u64,
-}
-
 /// 一次完整探测的结果。把「进程判据」与「CDP 判据」一起算出来，便于端到端验证。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DesktopProbe {
